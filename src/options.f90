@@ -55,9 +55,6 @@ module options
   integer, parameter :: opt_len = 256
   integer, parameter :: descr_len = 2048
 
-  ! Requirement: fmt_len > ceiling(log10(opt_len)) + 5
-  integer, parameter :: fmt_len = 16
-
   ! ** Option data types *******************************************************
 
   integer, parameter :: T_NONE=0, T_INTEGER=1, T_LOGICAL=2, T_FLAG=3, T_REAL=4,&
@@ -118,9 +115,9 @@ module options
   public :: define_option_integer, define_option_real, define_option_logical, &
        define_option_string, define_flag
   public :: get_option_integer, get_option_real, get_option_logical, &
-       get_option_string
-  public :: print_options, print_option_values, print_args
-  public :: option_found
+       get_option_string, get_flag
+  public :: print_option, print_options, print_option_values, print_args
+  public :: option_found, check_required_options
   public :: process_command_line
   public :: get_arg, get_num_args
 
@@ -169,28 +166,31 @@ contains
   end subroutine get_option_real
 
 
-  subroutine set_value_real(opt,valstr)
+  subroutine set_value_real(opt,valstr,ierr)
     ! Status: reviewed
     implicit none
     type(opt_t), intent(inout) :: opt
     character(len=*), intent(in) :: valstr
+    integer, intent(out) :: ierr
 
     integer :: ios
 
+    ierr = 1
     if (.not. is_real(valstr)) then
        write (error_unit,'(3a)') "Error: parameter ", trim(valstr), " is not a valid real number."
-       stop
+       return
     end if
     read(valstr,*,iostat=ios) opt%rval
     if (ios .ne. 0) then
        write (error_unit,'(3a)') "Error: couldn't convert ", trim(valstr), " to a real number."
-       stop
+       return
     end if
     if (opt%rval < opt%rmin .or. opt%rval > opt%rmax) then
-       write (error_unit,'(3a)') 'Error: value for option "', trim(opt%name), '" out of range!'
+       write (error_unit,'(3a)') 'Error: value for option "', trim(opt%name), '" out of range.'
        write (error_unit,'(3(a,es15.8))') "Value: ", opt%rval, ", min: ", opt%rmin, ", max: ", opt%rmax
-       stop
+       return
     end if
+    ierr = 0
   end subroutine set_value_real
 
 
@@ -250,29 +250,32 @@ contains
   end subroutine get_option_integer
 
 
-  subroutine set_value_integer(opt,valstr)
+  subroutine set_value_integer(opt,valstr,ierr)
     ! Status: reviewed
     implicit none
     type(opt_t), intent(inout) :: opt
     character(len=*), intent(in) :: valstr
+    integer, intent(out) :: ierr
 
     integer :: ios
 
+    ierr = 1
     if (.not. is_integer(valstr)) then
        write (error_unit,'(3a)') "Error: parameter ", trim(valstr), " is not a valid integer."
-       stop
+       return
     end if
     read(valstr,*,iostat=ios) opt%ival
     if (ios .ne. 0) then
        write (error_unit,'(3a)') "Error: couldn't convert ", trim(valstr), " to an integer&
             & (may be too large)."
-       stop
+       return
     end if
     if (opt%ival < opt%imin .or. opt%ival > opt%imax) then
-       write (error_unit,'(3a)') 'Error: value for option "', trim(opt%name), '" out of range!'
+       write (error_unit,'(3a)') 'Error: value for option "', trim(opt%name), '" out of range.'
        write (error_unit,'(3(a,i0))') "Value: ", opt%ival, ", min: ", opt%imin, ", max: ", opt%imax
-       stop
+       return
     end if
+    ierr = 0
   end subroutine set_value_integer
 
 
@@ -326,23 +329,26 @@ contains
   end subroutine get_option_logical
 
 
-  subroutine set_value_logical(opt,valstr)
+  subroutine set_value_logical(opt,valstr,ierr)
     ! Status: reviewed
     implicit none
     type(opt_t), intent(inout) :: opt
     character(len=*), intent(in) :: valstr
+    integer, intent(out) :: ierr
 
     integer :: ios
 
+    ierr = 1
     if (.not. is_logical(valstr)) then
        write (error_unit,'(3a)') "Error: parameter ", trim(valstr), " is not a valid logical value."
-       stop
+       return
     end if
     read(valstr,*,iostat=ios) opt%lval
     if (ios .ne. 0) then
        write (error_unit,'(3a)') "Error: couldn't convert ", trim(valstr), " to a logical value."
-       stop
+       return
     end if
+    ierr = 0
   end subroutine set_value_logical
 
 
@@ -401,18 +407,21 @@ contains
   end subroutine get_option_string
 
 
-  subroutine set_value_string(opt,valstr)
+  subroutine set_value_string(opt,valstr,ierr)
     ! Status: reviewed
     implicit none
     type(opt_t), intent(inout) :: opt
     character(len=*), intent(in) :: valstr
+    integer, intent(out) :: ierr
 
+    ierr = 1
     if (len_trim(valstr) > len(opt%cval)) then
        write (error_unit,'(a)') "set_value_string: value too long. Need to &
             &increase parameter opt_len in options.f90."
-       stop
+       return
     end if
     opt%cval = valstr
+    ierr = 0
   end subroutine set_value_string
 
 
@@ -448,6 +457,21 @@ contains
     opt%dtype = T_FLAG
     opt%lval  = .false.
   end subroutine define_flag
+
+
+  subroutine get_flag(opts,name,val)
+    ! Status: reviewed
+    implicit none
+    type(options_t),  target, intent(in) :: opts
+    character(len=*), intent(in)  :: name
+    logical,          intent(out) :: val
+
+    type(opt_t), pointer :: opt
+
+    opt => find_opt(opts,name=name,dtype=T_FLAG)
+    val = opt%lval
+  end subroutine get_flag
+
 
 
   ! ** ROUTINES WHICH CALL THE SPECIALIZED ROUTINES ABOVE ******************** !
@@ -486,7 +510,7 @@ contains
   end subroutine print_option_values
 
 
-  subroutine set_opt(opt,valstr)
+  subroutine set_opt(opt,valstr,ierr)
     ! Set the value of an option, given a string representing the value.
     ! If the option has already been set, error out. Otherwise, mark the option
     ! as having been found and set opt%str.
@@ -496,25 +520,27 @@ contains
     implicit none
     type(opt_t),      intent(inout) :: opt
     character(len=*), intent(in) :: valstr
+    integer, intent(out) :: ierr
 
+    ierr = 1
     if (opt%found) then
        write (error_unit,'(3a)') 'Error: tried to set option "', trim(opt%name), '" twice.'
-       stop
+       return
     else
        opt%found = .true.
     end if
 
     select case (opt%dtype)
     case (T_INTEGER)
-       call set_value_integer(opt,valstr)
+       call set_value_integer(opt,valstr,ierr)
     case (T_REAL)
-       call set_value_real(opt,valstr)
+       call set_value_real(opt,valstr,ierr)
     case (T_LOGICAL)
-       call set_value_logical(opt,valstr)
+       call set_value_logical(opt,valstr,ierr)
     case (T_FLAG)
-       call set_value_logical(opt,valstr)
+       call set_value_logical(opt,valstr,ierr)
     case (T_STRING)
-       call set_value_string(opt,valstr)
+       call set_value_string(opt,valstr,ierr)
     case default
           stop "Error in set_opt(): invalid type"
     end select
@@ -689,43 +715,46 @@ contains
     type(options_t), target, intent(in) :: opts
     integer, optional, intent(in) :: unit
 
-    integer, parameter :: format_buf_size = 4*descr_len + 2*opt_len
-    type(opt_t),     pointer :: opt
-!    type(command_t), pointer :: cmd
-    character(len=format_buf_size) :: buf
-    character(2*opt_len) :: synopsis
-    integer :: iopt, m_unit
+    integer :: m_unit, iopt
+    type(opt_t), pointer :: opt
 
     m_unit = output_unit
     if (present(unit)) m_unit = unit
 
-    ! if (associated(opts%cmds)) then
-    !    write (unit,'(a)') 'Commands:'
-    !    cmd => opts%cmds
-    !    do while (associated(cmd))
-    !       call format_opt(buf,cmd%name,cmd%descr)
-    !       write (unit,'(a)') trim(buf)
-    !       cmd => cmd%next
-    !    end do
-    ! end if
-
+    write (m_unit,'(a)') 'Options: '
     if (opts%nopts > 0) then
-       write (m_unit,'(a)') 'Options: '
-    else
-       write (m_unit,'(a)') 'No options defined.'
+       do iopt=1,opts%nopts
+          opt => opts%opts(iopt)
+          call print_option(opts,opt%name,unit)
+       end do
     end if
-    do iopt=1,opts%nopts
-       opt => opts%opts(iopt)
-       if (opt%dtype == T_FLAG) then
-          call format_flag_synopsis(synopsis,opt%name,opt%abbrev)
-       else
-          call format_val_synposis(synopsis,opt%name,opt%abbrev)
-       end if
-       call format_opt(buf,synopsis,opt%descr)
-       write (m_unit,'(a)',advance='no') trim(buf)
-    end do
-    write (m_unit,'(a)') ''
   end subroutine print_options
+
+
+  subroutine print_option(opts,name,unit)
+    implicit none
+    type(options_t), pointer, intent(in) :: opts
+    character(len=*),  intent(in) :: name
+    integer, optional, intent(in) :: unit
+
+    integer, parameter :: format_buf_size = 4*descr_len + 2*opt_len
+    character(len=format_buf_size) :: buf
+    character(2*opt_len) :: synopsis
+    type(opt_t), pointer :: opt
+    integer :: m_unit
+
+    m_unit = output_unit
+    if (present(unit)) m_unit = unit
+
+    opt => find_opt(opts,name)
+    if (opt%dtype == T_FLAG) then
+       call format_flag_synopsis(synopsis,opt%name,opt%abbrev)
+    else
+       call format_val_synposis(synopsis,opt%name,opt%abbrev)
+    end if
+    call format_opt(buf,synopsis,opt%descr)
+    write (m_unit,'(a)',advance='no') trim(buf)
+  end subroutine print_option
 
 
   subroutine format_val_synposis(buf,name,abbrev)
@@ -893,9 +922,6 @@ contains
        ! last_blank_didx == 0 .or. last_blank_didx >= beginning_of_line
        ! last_blank_didx == 0 .or. descr(last_blank_didx) == ' '
        ! last_blank_didx == 0 .or. descr(last_blank_bufidx) == ' '
-       ! (Suppose the ith character is definitely printed. Then there is a state
-       ! when didx == i and the character will not be backed over again.
-       ! Show the (i+1)st character is written.)
        if (descr(didx:didx) .ne. new_line('a')) then
           if (descr(didx:didx) == ' ') then
              last_blank_didx = didx
@@ -956,9 +982,6 @@ contains
     do iarg=1,opts%nargs
        write (m_unit,'(a)') trim(opts%args(iarg))
     end do
-    if (opts%nargs == 0) then
-       write (m_unit,'(a)') '(none)'
-    end if
   end subroutine print_args
 
 
@@ -1039,22 +1062,49 @@ contains
     ! Process the command-line arguments for the program, detecting options
     ! passed and storing their values in the options structure.
     ! If the command-line arguments are invalid (options which don't exist,
-    ! etc.), then ierr=1 is returned.
+    ! etc.), then ierr .ne. 0 is returned.
+    ! If an internal buffer is too short, a message is printed and the program
+    ! stops.
     ! If the command-line arguments are processed succesfully, ierr=0 is
     ! returned.
+    !
+    ! The command line has the form
+    !
+    ! <program_name> <term1> ... <termN>
+    !
+    ! Term possibilities:
+    !
+    !  (1)  -<f1><f2>...<fN>
+    !         where <fi> is a 1-character abbreviation for a flag
+    !  (2)  -<f1><f2>...<fN><opt> <value>
+    !         where <opt> is an option abbreviation, and <value> is the next term
+    !  (3)  --<flag_name>
+    !  (4)  --<flag_name>=<value>
+    !  (5)  --<opt_name>=<value>
+    !  (6)  --<opt_name> <value>
+    !         where <value> is the next term
+    !  (7)  <numeric>, stored as an argument. E.g. -1.23, 1.23, -.23, +1E10, 0.034
+    !  (8)  term which does not begin with dashes (stored as an argument)
+    !  (9)  -- (double dashes)
+    !       If this appears by itself, all subsequent terms are considered
+    !       arguments.
+    !  (10) - (A single dash by itself is allowed as an argument)
+    !
+    ! If a term begins with - or -- but doesn't fall into one of the above
+    ! categories, it is considered an error.
     ! Status: reviewed
-    ! TODO: Avoid stopping the program on when set_opt fails
     implicit none
     type(options_t),  target, intent(inout) :: opts
     integer, intent(out) :: ierr
 
     type(opt_t), pointer :: opt
     character(len=opt_len) :: buf, name, val
-    character(len=1) :: eqlc
+    character(len=1) :: eqlc, a
     integer :: iarg, max, j, status, l
 
     max = command_argument_count()
 
+    buf = ''
     ierr = 1
     iarg = 0
     do
@@ -1062,105 +1112,123 @@ contains
        if (iarg > max) exit
        call get_command_argument(iarg,buf,status=status,length=l)
        if (status .ne. 0) then
-          write (error_unit,'(a,i0)') "Error retrieving command argument ", iarg
-          write (error_unit,'(a,i0)') "Status from get_command_argument: ", status
+          write (error_unit,'(a,i0,a,i0)') "Error retrieving command argument ", &
+               iarg, " status: ", status
+          ierr = status
           return
        end if
        if (l >= len(buf)) then
-          ! Need at least one extra character
           write (error_unit,'(a,i0)') "Error: need to increase opt_len parameter in options.f90."
           stop
        end if
 
-       if (buf(1:1) == '-' .and. .not. in(buf(2:2),'0123456789.')) then
-          ! ** Short option: e.g. -b, -z, -bz, etc. ****************************
-          ! When multiple options are specified with a single dash, they must
-          ! all be flags, except for the last one.
-          ! Also, we do not allow the '=val' notation with this short form.
-          do j=2,len_trim(buf) ! Note len_trim(buf) < len(buf) by above
+       if (buf(1:1) == '-' .and. .not. in(buf(2:2),'-0123456789. ')) then
+          ! Case (i) or (ii)
+          do j=2,len_trim(buf)
              ! Find the option struct
-             opt => find_opt(opts,abbrev=buf(j:j),assert=.false.)
+             a = buf(j:j)
+             opt => find_opt(opts,abbrev=a,assert=.false.)
              if (.not. associated(opt)) then
-                write (error_unit,'(2a)') 'Error: unknown option: -', buf(j:j)
+                write (error_unit,'(3a)') 'Error: unknown option: "-', buf(j:j), '"'
                 return
              end if
              ! Get the option value
              if (opt%dtype == T_FLAG) then
+                ! Flags: -<abbrev>, no value allowed
                 val = ".true."
              else
-                if (buf(j+1:j+1) .ne. ' ') then
-                   write (error_unit,'(a,a,a)') 'Option "-', buf(j:j), '" requires an argument.'
-                   return
-                end if
-                if (len_trim(buf(j+1:)) .ne. 0) then
-                   write (error_unit,'(a,a)') "Error: invalid option string: ", trim(buf)
-                   return
-                end if
-                ! Get next argument and set it as the value
-                iarg = iarg + 1
-                if (iarg > max) then
+                ! Non-flag options: -<abbrev> <value>
+                if (j .ne. len_trim(buf) .or. iarg >= max) then
                    write (error_unit,'(3a)') 'Error: Option "-', buf(j:j), '" requires an argument.'
                    return
                 end if
+                iarg = iarg + 1
                 call get_command_argument(iarg,val,status=status)
                 if (status .ne. 0) then
                    write (error_unit,'(a,i0,a,i0)') "Error retrieving command argument ", &
-                        iarg, " status: ", status
+                        iarg, ". status: ", status
+                   ierr = status
                    return
                 end if
              end if
              ! Set the option value
-             call set_opt(opt,val)
+             call set_opt(opt,val,status)
+             if (status .ne. 0) then
+                ierr = status
+                return
+             end if
           end do
        else if (buf(1:2) == '--' .and. buf(3:3) .ne. ' ') then
-          ! ** Long option: e.g. --filename=blah ****************************
-          ! Find the option struct
-          call parse_long_option(buf,name,eqlc,val,ierr)
-          if (ierr .ne. 0) then
-             write (error_unit,*) 'Error: invalid option string "', trim(buf), '"'
+          ! Case (iii), (iv), (v)
+          call parse_long_option(buf,name,eqlc,val,status)
+          if (status .ne. 0) then
+             write (error_unit,'(2a)') 'Error: invalid option string "', trim(buf), '"'
+             ierr = status
              return
           end if
+          ! Find option
           opt => find_opt(opts,name=name,assert=.false.)
           if (.not. associated(opt)) then
-             write (error_unit,'(2a)') 'Error: unknown option: --', trim(name)
+             write (error_unit,'(3a)') 'Error: unknown option: "--', trim(name), '"'
              return
           end if
           ! Get the option value
           if (opt%dtype == T_FLAG) then
-             ! Flags can either be just --flag or --flag=<true/false>
-             if (eqlc .eq. '') then
+             ! Case (iii) --<flag_name>
+             if (eqlc .eq. ' ') then
                 val = '.true.'
              end if
+             ! Case (iv) --<flag_name>=<value>
+             ! (val is already set, do nothing)
           else
-             if (eqlc == '') then
-                ! The --name val format
+             ! Case (v) --<opt_name> <value>
+             if (eqlc == ' ') then
                 iarg = iarg + 1
                 if (iarg > max) then
-                   write (error_unit,*) 'Error: no value for option "', trim(name), '"'
+                   write (error_unit,'(3a)') 'Error: no value for option "', trim(name), '"'
                    return
                 end if
                 call get_command_argument(iarg,val,status=status)
                 if (status .ne. 0) then
                    write (error_unit,'(a,i0,a,i0)') "Error retrieving command argument ", &
                         iarg, " status: ", status
+                   ierr = status
                    return
                 end if
              end if
+             ! Case (iv) --<opt_name>=<value>
+             ! (val is already set, do nothing)
           end if
           ! Set the option value
-          call set_opt(opt,val)
+          call set_opt(opt,val,status)
+          if (status .ne. 0) then
+             ierr = status
+             return
+          end if
+       else if (buf == "--") then
+          ! Stop processing options
+          do while (iarg < max)
+             iarg = iarg + 1
+             call get_command_argument(iarg,buf,status=status)
+             if (status .ne. 0) then
+                write (error_unit,'(a,i0,a,i0)') "Error retrieving command argument ", &
+                     iarg, " status: ", status
+                ierr = status
+                return
+             end if
+             call store_arg(opts,buf)
+          end do
        else
-          ! ** Positional argument (not an option) *****************************
+          ! Positional argument (not an option)
           call store_arg(opts,buf)
        end if
     end do
     ierr = 0
-    call check_required_opts(opts, ierr)
   end subroutine process_command_line
 
 
 
-  subroutine check_required_opts(opts,ierr)
+  subroutine check_required_options(opts,ierr)
     ! Status: proved
     implicit none
     type(options_t),  target, intent(in) :: opts
@@ -1179,7 +1247,7 @@ contains
           return
        end if
     end do
-  end subroutine check_required_opts
+  end subroutine check_required_options
 
 
   subroutine parse_long_option(str,name,eqlc,val,ierr)
