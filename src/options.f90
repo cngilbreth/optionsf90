@@ -1,5 +1,5 @@
 ! options.f90: Library for command-line options processing.
-! version 0.5
+! version 0.5b1
 ! C.N. Gilbreth 2009-2012
 
 ! To Do:
@@ -25,8 +25,8 @@ module options
   ! Can customize these parameters as desired:
 
   ! Max number of options & positional arguments
-  integer, parameter :: maxopts = 16
-  integer, parameter :: maxargs = 16
+  integer, parameter :: maxopts = 32
+  integer, parameter :: maxargs = 32
   ! For formatting output
   integer, parameter :: name_column  = 3
   integer, parameter :: descr_column = 30
