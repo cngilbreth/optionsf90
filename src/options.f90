@@ -1,26 +1,44 @@
-! options.f90: Library for command-line options processing.
-! version 0.5b1
-! C.N. Gilbreth 2009-2012
-
-! To Do:
-!   1. Implement process_input_file()
-!   2. Implement functionality for positional arguments
+! options.f90: Module for options processing
+! http://infty.us/options/options.html
+! v0.7b1
 !
-! Design notes:
-!   1. We require the user to provide default values of all options so that
-!      get_option always returns something reasonable/well-defined.
-!   2. Setting default values of nopts and nargs in options_t requires the
-!      save attribute, but guarantees proper initialization of these variables
-!      without any extra action by the user.
-!   3. We specify types in function names (e.g. define_option_real) to allow
-!      different option types which use the same underlying data type, and to
-!      make adding new option types as simple as possible (just copy & edit the
-!      code for e.g. reals).
+! Copyright (c) 2009, 2012 Christopher N. Gilbreth
+!
+! Permission is hereby granted, free of charge, to any person obtaining a copy
+! of this software and associated documentation files (the "Software"), to deal
+! in the Software without restriction, including without limitation the rights
+! to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+! copies of the Software, and to permit persons to whom the Software is
+! furnished to do so, subject to the following conditions:
+!
+! The above copyright notice and this permission notice shall be included in all
+! copies or substantial portions of the Software.
+!
+! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+! IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+! SOFTWARE.
 
 module options
   use, intrinsic :: iso_fortran_env, only: output_unit, error_unit
   implicit none
   private
+
+  ! Design notes:
+  !   1. We require the user to provide default values of all options so that
+  !      get_option always returns something reasonable/well-defined.
+  !   2. Setting default values of nopts and nargs in options_t requires the
+  !      save attribute, but guarantees proper initialization of these variables
+  !      without any extra action by the user.
+  !   3. We specify types in function names (e.g. define_option_real) to allow
+  !      different option types which use the same underlying data type, and to
+  !      make adding new option types as simple as possible (just copy & edit
+  !      the code for e.g. reals). It also is a bit more readable than using a
+  !      generic interface.
+
 
   ! Can customize these parameters as desired:
 
@@ -85,7 +103,7 @@ module options
   ! value or an input value).
   !
   ! For names, Defined(name) ==> is_name(name)
-  ! Abbreviations: Defined(a) ==> (a == ' ' .or. is_abbrev_char(a)
+  ! Abbreviations: Defined(a) ==> (a == ' ' .or. is_abbrev_char(a))
 
   ! ** Main options structure **************************************************
 
@@ -120,6 +138,10 @@ module options
   public :: process_command_line
   public :: get_arg, get_num_args
 
+  ! ** public utility routines *************************************************
+
+  public :: is_real, is_integer, is_logical
+
   ! ****************************************************************************
 
 contains
@@ -128,7 +150,7 @@ contains
 
   subroutine define_option_real(opts,name,default,min,max,abbrev,required,description)
     ! Status: Proved
-    ! Defined(opt)
+    ! Postcondition: Defined(opt)
     implicit none
     type(options_t),  target, intent(inout) :: opts
     character(len=*), intent(in) :: name
@@ -206,7 +228,7 @@ contains
 
     m_unit = output_unit
     if (present(unit)) m_unit = unit
-    write (m_unit,'(2a,t30,es17.9e3)') trim(opt%name), ': ', opt%rval
+    write (m_unit,'(2a,t30,es22.14e3)') trim(opt%name), ': ', opt%rval
   end subroutine print_value_real
 
 
@@ -445,7 +467,7 @@ contains
 
     m_unit = output_unit
     if (present(unit)) m_unit = unit
-    write (m_unit,'(2a,t30,a)') trim(opt%name), ': ', trim(opt%cval)
+    write (m_unit,'(2a,t30,3a)') trim(opt%name), ': ', '"', trim(opt%cval), '"'
   end subroutine print_value_string
 
 
@@ -773,7 +795,7 @@ contains
 
 
   subroutine format_val_synposis(buf,name,abbrev)
-    ! Status: ok
+    ! Status: reviewed
     implicit none
     character(len=*), intent(out) :: buf
     character(len=*), intent(in) :: name, abbrev
@@ -797,7 +819,7 @@ contains
 
 
   subroutine format_flag_synopsis(buf,name,abbrev)
-    ! Status: ok
+    ! Status: reviewed
     implicit none
     character(len=*) :: buf
     character(len=*), intent(in) :: name, abbrev
@@ -988,14 +1010,18 @@ contains
     type(options_t), target, intent(in) :: opts
     integer, optional, intent(in) :: unit
 
-    integer :: iarg, m_unit
+    integer :: iarg, m_unit, ierr, nargs
+    character(len=opt_len) :: arg
 
     m_unit = output_unit
     if (present(unit)) m_unit = unit
 
     write (m_unit,'(a)') 'Arguments: '
-    do iarg=1,opts%nargs
-       write (m_unit,'(a)') trim(opts%args(iarg))
+    call get_num_args(opts,nargs)
+    do iarg=1,nargs
+       call get_arg(opts,iarg,arg,ierr)
+       if (ierr .ne. 0) stop "Error in print_args"
+       write (m_unit,'(3a)') '"', trim(arg), '"'
     end do
   end subroutine print_args
 
@@ -1009,7 +1035,9 @@ contains
     !    assert is present and .false., the function will instead return a null
     !    pointer.
     ! Status: Reviewed
-    ! Show: associated(opt) ==> Defined(opt)
+    !
+    ! Precondition: 1 <= i <= opts%nopts ==> Defined(opts%opts(i))
+    ! Postcondition: associated(opt) ==> Defined(opt)
     implicit none
     type(options_t),  target, intent(in) :: opts
     character(len=*), optional, intent(in) :: name
@@ -1034,19 +1062,24 @@ contains
 
     found = .false.
     do iopt=1,opts%nopts
+       ! Loop invariant: found == .false.
        opt => opts%opts(iopt)
        if (present(name)) then
           if (opt%name == name) found = .true.
        else if (present(abbrev)) then
           if (opt%abbrev == abbrev) found = .true.
        end if
+       ! found <==> opt%name == name .or. (present(abbrev) .and. opt%abbrev == abbrev)
        if (found .and. present(dtype)) then
           if (dtype .ne. opt%dtype) then
              write (error_unit,'(a,a)') "find_opt(): Datatype doesn't match for option: ", trim(name)
              stop
           end if
        end if
+       ! found <==> [opt%name == name .or. (present(abbrev) .and. opt%abbrev == abbrev)]
+       !            .and. (present(dtype) --> opt%dtype == dtype)
        if (found) return
+       ! found == .false.
     end do
 
     nullify(opt)
@@ -1076,7 +1109,7 @@ contains
 
   subroutine getarg_check(iarg,buf,status)
     ! Status: Proved
-    ! status == 0 ==> HasValue(buf)
+    ! status == 0 ==> Defined(buf)
     implicit none
     integer, intent(in) :: iarg
     character(len=*), intent(out) :: buf
@@ -1127,8 +1160,8 @@ contains
     !         where <value> is the next term
     !  (6)  --<opt_name>=<value>
     !  (7)  -- (double dashes)
-    !       If this appears by itself, all subsequent terms are considered
-    !       arguments.
+    !       (If this appears by itself, all subsequent terms are considered
+    !       arguments.)
     !  (8)  <numeric>, stored as an argument. E.g. -10, 1.23, -.23, 1E10, +0.34
     !  (9)  term which does not begin with a dash (stored as an argument)
     !  (10) - (A single dash by itself is allowed as an argument)
@@ -1169,7 +1202,7 @@ contains
              if (opt%dtype == T_FLAG) then
                 ! Flags: -<abbrev>, no value allowed
                 val = ".true."
-                ! IsFlag(opt) .and. HasValue(val)
+                ! IsFlag(opt) .and. Defined(val)
              else
                 ! Non-flag options: -<abbrev> <value>
                 iarg = iarg + 1
@@ -1178,13 +1211,13 @@ contains
                    ierr = 1
                    return
                 end if
-                ! j == lt .and. iarg <= max
+                ! j == len_trim(buf) .and. iarg <= max
                 call getarg_check(iarg,val,ierr)
                 if (ierr .ne. 0) return
-                ! ierr .eq. 0 => HasValue(val)
-                ! j == len_trim(buf) .and. HasValue(val)
+                ! ierr .eq. 0 => Defined(val) (may be blank)
+                ! j == len_trim(buf) .and. Defined(val)
              end if
-             ! HasValue(val) .and. (IsFlag(opt) .or. (j == len_trim(buf))) .and. Defined(opt)
+             ! Defined(val) .and. (IsFlag(opt) .or. (j == len_trim(buf))) .and. Defined(opt)
              ! Set the option value
              call set_opt(opt,val,ierr)
              if (ierr .ne. 0) return
@@ -1197,7 +1230,7 @@ contains
              write (error_unit,'(2a)') 'Error: invalid option string "', trim(buf), '"'
              return
           end if
-          ! IsNameString(name) .and. eqlc ∈ " =" .and. (eqlc == '=' ==> HasValue(val))
+          ! IsNameString(name) .and. eqlc ∈ " =" .and. (eqlc == '=' ==> Defined(val))
           ! Find option
           opt => find_opt(opts,name=name,assert=.false.)
           if (.not. associated(opt)) then
@@ -1253,6 +1286,7 @@ contains
        else if (buf(1:1) == '-' .and. in(buf(2:2), '-0123456789.')) then
           ! Case (8) Numeric
           if (.not. is_real(buf)) then
+             ! Note is_integer(buf) ==> is_real(buf), so we just check the latter
              write (error_unit,'(3a)') 'Error: expected a numeric argument: "', trim(buf), '"'
              ierr = 1
              return
@@ -1273,7 +1307,6 @@ contains
     end do
     ierr = 0
   end subroutine process_command_line
-
 
 
   subroutine check_required_options(opts,ierr)
@@ -1500,14 +1533,14 @@ contains
   end subroutine check_name
 
 
-  function get_num_args(opts)
+  subroutine get_num_args(opts,num)
     ! Status: reviewed
     implicit none
     type(options_t), target, intent(in) :: opts
-    integer :: get_num_args
+    integer, intent(out) :: num
 
-    get_num_args = opts%nargs
-  end function get_num_args
+    num = opts%nargs
+  end subroutine get_num_args
 
 
   subroutine get_arg(opts,index,str,ierr)
@@ -1518,6 +1551,7 @@ contains
     character(len=*), intent(out) :: str
     integer, intent(out) :: ierr
 
+    ierr = 0
     if (index > opts%nargs .or. index < 1) then
        ierr = 1
        return
