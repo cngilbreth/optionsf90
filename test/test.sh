@@ -253,8 +253,9 @@ echo "$name passed"
 tn=`expr $tn + 1`
 name="test$tn (real value 3)"
 $TEST --intr 0 --real1 -0 &> test.out
-# Surprisingly, gfortran keeps the (-) sign in front of 0. Is this standard?
-check_param 'test.out' 'real1' '-0.00+E\+000' "$name"
+# Surprisingly, gfortran keeps the (-) sign in front of 0. The Intel compiler
+# does not.
+check_param 'test.out' 'real1' '[- ]0.00+E\+000' "$name"
 echo "$name passed"
 
 # Real value 

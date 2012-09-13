@@ -1,6 +1,6 @@
 ! options.f90: Module for options processing
 ! http://infty.us/options/options.html
-! v0.7b1
+! v0.7b2
 !
 ! Copyright (c) 2009, 2012 Christopher N. Gilbreth
 !
@@ -770,7 +770,7 @@ contains
 
   subroutine print_option(opts,name,unit)
     implicit none
-    type(options_t), pointer, intent(in) :: opts
+    type(options_t), target, intent(in) :: opts
     character(len=*),  intent(in) :: name
     integer, optional, intent(in) :: unit
 
