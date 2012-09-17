@@ -1,4 +1,4 @@
-program myprogram
+program example1
   use options
   implicit none
 
@@ -19,8 +19,8 @@ program myprogram
      stop
   end if
   if (option_found(opts,"help")) then
-     write (*,'(a)') "myprogram: Compute some useful things."
-     write (*,'(a)') "Usage: myprogram [options]"
+     write (*,'(a)') "example1: Compute some useful things."
+     write (*,'(a)') "Usage: example1 [options]"
      write (*,'(a)') ""
      call print_options(opts)
      stop
@@ -37,4 +37,4 @@ program myprogram
   write (*,'(a,i0)') "Value of Nt: ", nt
   write (*,'(a,es10.3)') "Value of beta: ", beta
   ! Etc
-end program myprogram
+end program example1
