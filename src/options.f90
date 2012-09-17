@@ -1,6 +1,6 @@
 ! options.f90: Module for options processing
 ! http://infty.us/options/options.html
-! v0.8α1
+! v0.8b1
 !
 ! Copyright (c) 2009, 2012 Christopher N. Gilbreth
 !
