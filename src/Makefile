@@ -1,4 +1,4 @@
-FC = gfortran -Wall -pedantic -fcheck=all
+FC = gfortran -Wall -pedantic -fcheck=all -g
 
 test: options.o test.o
 	$(FC) $+ -o $@
