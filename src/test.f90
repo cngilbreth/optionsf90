@@ -26,10 +26,10 @@ program testopts
   implicit none
 
   type(options_t), save :: opts
-  integer :: ierr, n1, n2, q
-  logical :: l1, h, flag1
+  integer :: ierr, n1, n2, q, n1_g1
+  logical :: l1, h, flag1, flag1_g1
   real(8) :: r1, r2
-  character(len=1024) :: str1
+  character(len=1024) :: str1, inputfile, group1_inputfile, overwrite
 
   call define_flag(opts,'help','h',description="Print this help message.")
   call define_option_integer(opts,"n1",16,abbrev='a',description="An integer option. &
@@ -64,12 +64,50 @@ program testopts
        description="This is a required option, intended to test check_required_opts.",&
        required=.true.)
 
+  ! This option is used by the test
+  call define_option_string(opts,'inputfile','',abbrev='i',description="Input file. &
+       &Read options from this file after processing command-line options. Will &
+       &overwrite (for this test).")
+  ! So is this
+  call define_option_string(opts,'overwrite','yes',abbrev='o',description=&
+       &"Overwrite command-line options when reading from input file")
+
+  call define_option_string(opts,'group1_inputfile','',abbrev='g',description=&
+       &"Input file for group1 options.")
+
+  ! Define options in a group "group1"
+  call define_flag(opts,'flag1_g1',description="This is a flag, defined in&
+       & the group ""group1"".", group='group1')
+  call define_option_integer(opts,"n1_g1",1024,abbrev='j',description="An integer option,&
+       & defined in the group ""group1"".",group='group1')
+
   call process_command_line(opts,ierr)
   if (ierr .ne. 0) stop "Try using -h for more info."
   if (option_found(opts,"help")) then
      call print_options(opts)
      stop
   end if
+
+  call get_option_string(opts,'inputfile',inputfile)
+  call get_option_string(opts,'overwrite',overwrite)
+  call get_option_string(opts,'group1_inputfile',group1_inputfile)
+
+  if (option_found(opts,'inputfile')) then
+     write (*,'(a)') "* Reading input file ..."
+     call process_input_file(opts,inputfile,ierr,overwrite=overwrite)
+     if (ierr .ne. 0) then
+        stop "Error reading input file."
+     end if
+  end if
+
+  if (option_found(opts,'group1_inputfile')) then
+     write (*,'(a)') "* Reading group1 input file ..."
+     call process_input_file(opts,group1_inputfile,ierr,overwrite=overwrite,group='group1')
+     if (ierr .ne. 0) then
+        stop "Error reading group1 input file."
+     end if
+  end if
+
 
   write (*,'(a)') "* Test of check_required_opts:"
   call check_required_options(opts,ierr)
@@ -90,6 +128,9 @@ program testopts
   call get_option_string(opts,'str1',str1)
   call get_flag(opts,'flag1',flag1)
   call get_option_integer(opts,"intr",q)
+  call get_option_string(opts,'inputfile',inputfile)
+  call get_flag(opts,'flag1_g1',flag1_g1)
+  call get_option_integer(opts,'n1_g1',n1_g1)
   write (*,'(1x,a,l1)') "get_option('help'): ", h
   write (*,'(1x,a,i0)') "get_option('n1'): ", n1
   write (*,'(1x,a,i0)') "get_option('n2'): ", n2
@@ -99,6 +140,10 @@ program testopts
   write (*,'(1x,3a)') "get_option('str1'): """, trim(str1), '"'
   write (*,'(1x,a,l1)') "get_option('flag1'): ", flag1
   write (*,'(1x,a,i0)') "get_option('intr'): ", q
+  write (*,'(1x,3a)') "get_option('inputfile'): """, trim(inputfile), '"'
+  write (*,'(1x,a,l1)') "get_option('flag1_g1'): ", flag1_g1
+  write (*,'(1x,a,i0)') "get_option('n1_g1'): ", n1_g1
+
 
   write (*,*) ""
   write (*,'(a)') "* Test of opt_found:"
@@ -111,6 +156,10 @@ program testopts
   write (*,'(1x,a,l1)') "option_found('str1'): ", option_found(opts,'str1')
   write (*,'(1x,a,l1)') "option_found('flag1'): ", option_found(opts,'flag1')
   write (*,'(1x,a,l1)') "option_found('intr'): ", option_found(opts,'intr')
+  write (*,'(1x,a,l1)') "option_found('inputfile'): ", option_found(opts,'inputfile')
+  write (*,'(1x,a,l1)') "option_found('flag1_g1'): ", option_found(opts,'flag1_g1')
+  write (*,'(1x,a,l1)') "option_found('n1_g1'): ", option_found(opts,'n1_g1')
+
 
   write (*,*) ""
   write (*,'(a)') "* Test of get_arg and get_num_args (via print_args):"

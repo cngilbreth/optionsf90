@@ -501,3 +501,119 @@ name="test$tn (duplicate parameters 3)"
 $TEST --intr 10 --real1 33.7E2 +33.33 -r 112 &> test.out
 check_output 'test.out' 'tried to set option "real1" twice' "$name"
 echo "$name passed"
+
+
+# Input file -- formatting
+tn=`expr $tn + 1`
+name="test$tn (input file 1)"
+cat > /tmp/input <<EOF
+intr: 1
+
+ real1  :  1.23456E-011
+# This is a comment
+str1	: abc def # This is a comment
+inputfile: 'this is a long
+quote over several lines'# comment
+EOF
+$TEST -i /tmp/input &> test.out
+check_param 'test.out' 'intr' '1' "$name [intr]"
+check_param 'test.out' 'real1' '1.234560+E-011' "$name [real1]"
+check_param 'test.out' 'str1' '"abc def"' "$name [str1]"
+check_param 'test.out' 'inputfile' '"this is a long' "$name [quote a]"
+check_output 'test.out' '^quote over several lines"$' "$name [quote b]"
+echo "$name passed"
+
+
+# Input file -- invalid name char
+tn=`expr $tn + 1`
+name="test$tn (input file 2)"
+cat > /tmp/input <<EOF
+i=ntr: 1
+EOF
+$TEST -i /tmp/input &> test.out
+check_output 'test.out' "^Error: expected ':'" "$name"
+echo "$name passed"
+
+
+# Input file -- EOF after option name
+tn=`expr $tn + 1`
+name="test$tn (input file 3)"
+cat > /tmp/input <<EOF
+intr
+EOF
+$TEST -i /tmp/input &> test.out
+check_output 'test.out' "^Error: expected ':'" "$name"
+echo "$name passed"
+
+
+# Input file -- unterminated quotation
+tn=`expr $tn + 1`
+name="test$tn (input file 4)"
+cat > /tmp/input <<EOF
+intr: 'yyy ggg
+EOF
+$TEST -i /tmp/input &> test.out
+check_output 'test.out' "^Error: unterminated quote" "$name"
+echo "$name passed"
+
+
+# Input file -- option group
+tn=`expr $tn + 1`
+name="test$tn (option group 1)"
+cat > /tmp/input <<EOF
+flag1_g1: .true.
+n1_g1: 33
+EOF
+$TEST --intr 1 -g /tmp/input &> test.out
+check_param 'test.out' 'flag1_g1' 'T' "$name [flag_g1]"
+check_param 'test.out' 'n1_g1' '33' "$name [n1_g1]"
+echo "$name passed"
+
+
+# Input file -- option group -- option from different group
+tn=`expr $tn + 1`
+name="test$tn (option group 2)"
+cat > /tmp/input <<EOF
+flag1_g1: .true.
+intr: 33
+EOF
+$TEST --intr 1 -g /tmp/input &> test.out
+check_output 'test.out' '^Error: unknown option "intr" in group' "$name"
+echo "$name passed"
+
+
+# input file -- overwrite = yes
+tn=`expr $tn + 1`
+name="test$tn (overwrite 1)"
+cat > /tmp/input <<EOF
+intr: 42
+EOF
+$TEST --intr 3 -o 'yes' -i /tmp/input &> test.out
+check_param 'test.out' 'intr' '42' "$name"
+echo "$name passed"
+
+
+# input file -- overwrite = no
+tn=`expr $tn + 1`
+name="test$tn (overwrite 2)"
+cat > /tmp/input <<EOF
+intr: 42
+EOF
+$TEST --intr 3 -o 'no' -i /tmp/input &> test.out
+check_param 'test.out' 'intr' '3' "$name"
+echo "$name passed"
+
+
+# input file -- overwrite = error
+tn=`expr $tn + 1`
+name="test$tn (overwrite 3)"
+cat > /tmp/input <<EOF
+intr: 42
+EOF
+$TEST --intr 3 -o 'error' -i /tmp/input &> test.out
+check_output 'test.out' '^Error: tried to set option "intr" twice' "$name"
+echo "$name passed"
+
+
+# That's all folks
+echo "All tests passed."
