@@ -772,7 +772,6 @@ contains
     m_unit = output_unit
     if (present(unit)) m_unit = unit
 
-    write (m_unit,'(a)') 'Options: '
     if (opts%nopts > 0) then
        do iopt=1,opts%nopts
           opt => opts%opts(iopt)
