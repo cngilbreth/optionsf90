@@ -108,7 +108,17 @@ module options
      ! Positional arguments
      integer :: nargs = 0
      character(len=opt_len) :: args(maxargs)
+
+     ! Help routine
+     procedure(helpr), pointer, nopass :: help_routine => null()
   end type options_t
+
+  abstract interface
+     subroutine helpr(opts)
+       import
+       type(options_t), intent(in) :: opts
+     end subroutine helpr
+  end interface
 
   ! Invariants:
   ! 1. nopts ≤ maxopts
@@ -123,7 +133,7 @@ module options
   ! ** Public interface functions **********************************************
 
   public :: define_option_integer, define_option_real, define_option_logical, &
-       define_option_string, define_flag
+       define_option_string, define_flag, define_help_option
   public :: get_option_integer, get_option_real, get_option_logical, &
        get_option_string, get_flag
   public :: print_option, print_options, print_option_values, print_args
@@ -591,6 +601,23 @@ contains
 
 
   ! ** GENERAL ROUTINES ********************************************************
+
+
+  subroutine define_help_option(opts,help_routine,group)
+    implicit none
+    type(options_t), target, intent(inout) :: opts
+    interface
+       subroutine help_routine(opts)
+         import
+         type(options_t), intent(in) :: opts
+       end subroutine help_routine
+    end interface
+    character(len=*), optional, intent(in) :: group
+
+    call define_flag(opts,"help",abbrev='h',description="Print this help message.",&
+         group=group)
+    opts%help_routine => help_routine
+  end subroutine define_help_option
 
 
   logical function is_logical(str)
@@ -1236,6 +1263,7 @@ contains
     character(len=opt_len) :: buf, name, val
     character(len=1) :: eqlc, a
     integer :: iarg, max, j
+    logical :: help
 
     max = command_argument_count()
 
@@ -1244,7 +1272,7 @@ contains
     do while (iarg < max)
        iarg = iarg + 1
        call getarg_check(iarg,buf,ierr)
-       if (ierr .ne. 0) return
+       if (ierr .ne. 0) goto 99
        if (buf(1:1) == '-' .and. is_abbrev_char(buf(2:2))) then
           ! Short options: Case (1) or (2)
           do j=2,len_trim(buf)
@@ -1259,7 +1287,7 @@ contains
                    write (error_unit,'(a)') ''
                 end if
                 ierr = 1
-                return
+                goto 99
              end if
              ! associated(opt) => Defined(opt)
              ! Get the option value
@@ -1273,18 +1301,18 @@ contains
                 if (j .ne. len_trim(buf) .or. iarg > max) then
                    write (error_unit,'(3a)') 'Error: Option "-', buf(j:j), '" requires an argument.'
                    ierr = 1
-                   return
+                   goto 99
                 end if
                 ! j == len_trim(buf) .and. iarg <= max
                 call getarg_check(iarg,val,ierr)
-                if (ierr .ne. 0) return
+                if (ierr .ne. 0) goto 99
                 ! ierr .eq. 0 => Defined(val) (may be blank)
                 ! j == len_trim(buf) .and. Defined(val)
              end if
              ! Defined(val) .and. (IsFlag(opt) .or. (j == len_trim(buf))) .and. Defined(opt)
              ! Set the option value
              call set_opt(opt,val,"error",ierr)
-             if (ierr .ne. 0) return
+             if (ierr .ne. 0) goto 99
              ! IsValid(val,opt)
           end do
        else if (buf(1:2) == '--' .and. is_name_char(buf(3:3))) then
@@ -1292,7 +1320,7 @@ contains
           call parse_long_option(buf,name,eqlc,val,ierr)
           if (ierr .ne. 0) then
              write (error_unit,'(2a)') 'Error: invalid option string "', trim(buf), '"'
-             return
+             goto 99
           end if
           ! IsNameString(name) .and. eqlc ∈ " =" .and. (eqlc == '=' ==> Defined(val))
           ! Find option
@@ -1305,7 +1333,7 @@ contains
                 write (error_unit,'(a)') ''
              end if
              ierr = 1
-             return
+             goto 99
           end if
           ! Defined(opt)
           ! Get the option value
@@ -1327,10 +1355,10 @@ contains
                 if (iarg > max) then
                    write (error_unit,'(3a)') 'Error: option "--', trim(name), '" requires an argument.'
                    ierr = 1
-                   return
+                   goto 99
                 end if
                 call getarg_check(iarg,val,ierr)
-                if (ierr .ne. 0) return
+                if (ierr .ne. 0) goto 99
                 ! Defined(val)
              else
                 ! eqlc == '='. so Defined(val)
@@ -1342,14 +1370,14 @@ contains
           ! Defined(opt) .and. Defined(val)
           ! Set the option value
           call set_opt(opt,val,"error",ierr)
-          if (ierr .ne. 0) return
+          if (ierr .ne. 0) goto 99
           ! IsValid(val,opt) .and. ValueSet(val,opt)
        else if (buf == "--") then
           ! Case (7) Stop processing options
           do while (iarg < max)
              iarg = iarg + 1
              call getarg_check(iarg,buf,ierr)
-             if (ierr .ne. 0) return
+             if (ierr .ne. 0) goto 99
              call store_arg(opts,buf)
           end do
        else if (buf(1:1) == '-' .and. in(buf(2:2), '-0123456789.')) then
@@ -1358,7 +1386,7 @@ contains
              ! Note is_integer(buf) ==> is_real(buf), so we just check the latter
              write (error_unit,'(3a)') 'Error: expected a numeric argument: "', trim(buf), '"'
              ierr = 1
-             return
+             goto 99
           end if
           call store_arg(opts,buf)
        else if (buf(1:1) .ne. '-') then
@@ -1371,13 +1399,22 @@ contains
           ! Anything else
           write (error_unit,'(3a)') 'Error: invalid argument: "', trim(buf), '"'
           ierr = 1
-          return
+          goto 99
        end if
     end do
     ierr = 0
+    if (associated(opts%help_routine)) then
+       call get_flag(opts,'help',help)
+       if (help) then
+          call opts%help_routine(opts)
+          ierr = 3
+       end if
+    end if
+    return
+99  if (associated(opts%help_routine)) then
+       write (error_unit,'(a)') "Try using -h for more info."
+    end if
   end subroutine process_command_line
-
-
 
 
   subroutine check_required_options(opts,ierr)
@@ -1396,6 +1433,9 @@ contains
           write (error_unit,'(3a)') 'Error: missing required parameter: "', &
                trim(opt%name), '"'
           ierr = 2
+          if (associated(opts%help_routine)) then
+             write (error_unit,'(a)') "Try using -h for more info."
+          end if
           return
        end if
     end do
