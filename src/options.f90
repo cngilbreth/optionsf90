@@ -1,6 +1,6 @@
 ! options.f90: Module for options processing
 ! http://infty.us/options/options.html
-! v0.7b2
+! v0.8α1
 !
 ! Copyright (c) 2009, 2012 Christopher N. Gilbreth
 !
@@ -27,19 +27,6 @@ module options
   implicit none
   private
 
-  ! Design notes:
-  !   1. We require the user to provide default values of all options so that
-  !      get_option always returns something reasonable/well-defined.
-  !   2. Setting default values of nopts and nargs in options_t requires the
-  !      save attribute, but guarantees proper initialization of these variables
-  !      without any extra action by the user.
-  !   3. We specify types in function names (e.g. define_option_real) to allow
-  !      different option types which use the same underlying data type, and to
-  !      make adding new option types as simple as possible (just copy & edit
-  !      the code for e.g. reals). It also is a bit more readable than using a
-  !      generic interface.
-
-
   ! Can customize these parameters as desired:
 
   ! Max number of options & positional arguments
@@ -47,7 +34,7 @@ module options
   integer, parameter :: maxargs = 32
   ! For formatting output
   integer, parameter :: name_column  = 3
-  integer, parameter :: descr_column = 30
+  integer, parameter :: descr_column = 28
   integer, parameter :: max_column   = 90
   ! Kind for real options
   integer, parameter :: rk = selected_real_kind(p=15)
@@ -56,6 +43,11 @@ module options
   ! String lengths
   integer, parameter :: opt_len = 256
   integer, parameter :: descr_len = 2048
+
+  ! The following shouldn't be changed unless you really know what you're doing
+  character(len=2) :: crlf = achar(13)//achar(10) ! newline characters
+  character(len=2) :: blank = ' '//achar(9)  ! space or tab
+  character(len=8) :: name_char_excludes = '''" !#=:$'
 
   ! ** Option data types *******************************************************
 
@@ -70,6 +62,7 @@ module options
      character (len=descr_len) :: descr
      logical :: required, found
      integer :: dtype
+     character(len=opt_len) :: group
 
      ! All types: the value as a string
      character(len=opt_len) :: str
@@ -91,7 +84,7 @@ module options
 
   ! Predicate:
   ! Defined(opt) :=
-  !   Defined(name,abbrev,descr,required,found,dtype)
+  !   Defined(name,abbrev,descr,required,found,dtype,group)
   !   .and. (dtype == T_INTEGER ==> Defined(ival,imin,imax))
   !   .and. (dtype == T_REAL ==> Defined(rval,rmin,rmax))
   !   .and. (dtype == T_LOGICAL ==> Defined(lval))
@@ -135,11 +128,10 @@ module options
        get_option_string, get_flag
   public :: print_option, print_options, print_option_values, print_args
   public :: option_found, check_required_options
-  public :: process_command_line
+  public :: process_command_line, process_input_file
   public :: get_arg, get_num_args
 
-  ! ** public utility routines *************************************************
-
+  ! The following are useful
   public :: is_real, is_integer, is_logical
 
   ! ****************************************************************************
@@ -148,7 +140,7 @@ contains
 
   ! ** REAL OPTIONS ********************************************************** !
 
-  subroutine define_option_real(opts,name,default,min,max,abbrev,required,description)
+  subroutine define_option_real(opts,name,default,min,max,abbrev,required,description,group)
     ! Status: Proved
     ! Postcondition: Defined(opt)
     implicit none
@@ -159,10 +151,11 @@ contains
     character(len=*), optional, intent(in) :: abbrev
     logical,          optional, intent(in) :: required
     character(len=*), optional, intent(in) :: description
+    character(len=*), optional, intent(in) :: group
 
     type(opt_t), pointer :: opt
 
-    opt => new_opt(opts,name,abbrev,required,description)
+    opt => new_opt(opts,name,abbrev,required,description,group)
 
     opt%dtype = T_REAL
     opt%rval  = default
@@ -235,7 +228,7 @@ contains
   ! ** INTEGER OPTIONS ******************************************************* !
 
 
-  subroutine define_option_integer(opts,name,default,min,max,abbrev,required,description)
+  subroutine define_option_integer(opts,name,default,min,max,abbrev,required,description,group)
     ! Status: reviewed
     implicit none
     type(options_t), target,  intent(inout) :: opts
@@ -245,10 +238,11 @@ contains
     character(len=*), optional, intent(in) :: abbrev
     logical,          optional, intent(in) :: required
     character(len=*), optional, intent(in) :: description
+    character(len=*), optional, intent(in) :: group
 
     type(opt_t), pointer :: opt
 
-    opt => new_opt(opts,name,abbrev,required,description)
+    opt => new_opt(opts,name,abbrev,required,description,group)
 
     opt%dtype  = T_INTEGER
     opt%ival   = default
@@ -328,7 +322,7 @@ contains
   ! ** LOGICAL OPTIONS ******************************************************* !
 
 
-  subroutine define_option_logical(opts,name,default,abbrev,required,description)
+  subroutine define_option_logical(opts,name,default,abbrev,required,description,group)
     ! Status: reviewed
     implicit none
     type(options_t),  target, intent(inout) :: opts
@@ -337,10 +331,11 @@ contains
     character(len=*), optional, intent(in) :: abbrev
     logical,          optional, intent(in) :: required
     character(len=*), optional, intent(in) :: description
+    character(len=*), optional, intent(in) :: group
 
     type(opt_t), pointer :: opt
 
-    opt => new_opt(opts,name,abbrev,required,description)
+    opt => new_opt(opts,name,abbrev,required,description,group)
 
     opt%dtype = T_LOGICAL
     opt%lval  = default
@@ -401,7 +396,7 @@ contains
   ! ** STRING OPTIONS ******************************************************** !
 
 
-  subroutine define_option_string(opts,name,default,abbrev,required,description)
+  subroutine define_option_string(opts,name,default,abbrev,required,description,group)
     ! Status: reviewed
     implicit none
     type(options_t),  target, intent(inout) :: opts
@@ -410,10 +405,11 @@ contains
     character(len=*), optional, intent(in) :: abbrev
     logical,          optional, intent(in) :: required
     character(len=*), optional, intent(in) :: description
+    character(len=*), optional, intent(in) :: group
 
     type(opt_t), pointer :: opt
 
-    opt => new_opt(opts,name,abbrev,required,description)
+    opt => new_opt(opts,name,abbrev,required,description,group)
 
     opt%dtype = T_STRING
     opt%cval  = default
@@ -474,17 +470,18 @@ contains
   ! ** FLAGS ***************************************************************** !
 
 
-  subroutine define_flag(opts,name,abbrev,description)
+  subroutine define_flag(opts,name,abbrev,description,group)
     ! Status: reviewed
     implicit none
     type(options_t),  target, intent(inout) :: opts
     character(len=*), intent(in) :: name
     character(len=*), optional, intent(in) :: abbrev
     character(len=*), optional, intent(in) :: description
+    character(len=*), optional, intent(in) :: group
 
     type(opt_t), pointer :: opt
 
-    opt => new_opt(opts,name,abbrev,required=.false.,description=description)
+    opt => new_opt(opts,name,abbrev,required=.false.,description=description,group=group)
 
     opt%dtype = T_FLAG
     opt%lval  = .false.
@@ -542,7 +539,7 @@ contains
   end subroutine print_option_values
 
 
-  subroutine set_opt(opt,valstr,ierr)
+  subroutine set_opt(opt,valstr,overwrite,ierr)
     ! Set the value of an option, given a string representing the value.
     ! If the option has already been set, error out. Otherwise, mark the option
     ! as having been found and set opt%str.
@@ -552,15 +549,28 @@ contains
     implicit none
     type(opt_t),      intent(inout) :: opt
     character(len=*), intent(in) :: valstr
+    character(len=*), intent(in) :: overwrite
     integer, intent(out) :: ierr
 
     ierr = 1
-    if (opt%found) then
-       write (error_unit,'(3a)') 'Error: tried to set option "', trim(opt%name), '" twice.'
-       return
-    else
-       opt%found = .true.
-    end if
+    select case (upcase(overwrite))
+    case ("ERROR")
+       if (opt%found) then
+          write (error_unit,'(3a)') 'Error: tried to set option "', trim(opt%name), '" twice.'
+          return
+       end if
+    case ("YES")
+    case ("NO")
+       if (opt%found) then
+          ierr = 0
+          return
+       end if
+    case default
+       write (error_unit,'(a)') "Error: invalid value for overwrite policy ('", trim(overwrite), "')"
+       stop
+    end select
+
+    opt%found = .true.
 
     select case (opt%dtype)
     case (T_INTEGER)
@@ -694,7 +704,7 @@ contains
   end function option_found
 
 
-  function new_opt(opts,name,abbrev,required,description) result(opt)
+  function new_opt(opts,name,abbrev,required,description,group) result(opt)
     ! Allocate and append a new option to the end of the options list, and
     ! initialize the generic fields which apply to all data types.
     ! On exit: Defined(name,abbrev,descr,required,found)
@@ -705,6 +715,7 @@ contains
     character(len=*), optional, intent(in) :: abbrev
     logical,          optional, intent(in) :: required
     character(len=*), optional, intent(in) :: description
+    character(len=*), optional, intent(in) :: group
     ! Return value
     type(opt_t), pointer :: opt
 
@@ -739,18 +750,21 @@ contains
     opt%required = .false.
     opt%found = .false.
     opt%dtype = T_NONE
+    opt%group = ''
     if (present(abbrev)) opt%abbrev = abbrev
     if (present(description)) opt%descr = description
+    if (present(group)) opt%group = group
     if (present(required)) opt%required = required
     ! Defined(name,abbrev,descr,required,found)
   end function new_opt
 
 
-  subroutine print_options(opts,unit)
+  subroutine print_options(opts,unit,group,style)
     ! Status: ok
     implicit none
     type(options_t), target, intent(in) :: opts
     integer, optional, intent(in) :: unit
+    character(len=*), optional, intent(in) :: group, style
 
     integer :: m_unit, iopt
     type(opt_t), pointer :: opt
@@ -762,17 +776,21 @@ contains
     if (opts%nopts > 0) then
        do iopt=1,opts%nopts
           opt => opts%opts(iopt)
-          call print_option(opts,opt%name,unit)
+          if (present(group)) then
+             if (opt%group .ne. group) cycle
+          end if
+          call print_option(opts,opt%name,unit,style)
        end do
     end if
   end subroutine print_options
 
 
-  subroutine print_option(opts,name,unit)
+  subroutine print_option(opts,name,unit,style)
     implicit none
     type(options_t), target, intent(in) :: opts
     character(len=*),  intent(in) :: name
     integer, optional, intent(in) :: unit
+    character(len=*), optional, intent(in) :: style
 
     integer, parameter :: format_buf_size = 4*descr_len + 2*opt_len
     character(len=format_buf_size) :: buf
@@ -785,58 +803,91 @@ contains
 
     opt => find_opt(opts,name)
     if (opt%dtype == T_FLAG) then
-       call format_flag_synopsis(synopsis,opt%name,opt%abbrev)
+       call format_flag_synopsis(synopsis,opt%name,opt%abbrev,style)
     else
-       call format_val_synposis(synopsis,opt%name,opt%abbrev)
+       call format_val_synposis(synopsis,opt%name,opt%abbrev,style)
     end if
     call format_opt(buf,synopsis,opt%descr)
     write (m_unit,'(a)',advance='no') trim(buf)
   end subroutine print_option
 
 
-  subroutine format_val_synposis(buf,name,abbrev)
-    ! Status: reviewed
+  subroutine format_val_synposis(buf,name,abbrev,style)
     implicit none
     character(len=*), intent(out) :: buf
     character(len=*), intent(in) :: name, abbrev
+    character(len=*), optional, intent(in) :: style
+
+    character(len=16) :: m_style
+
+    m_style = "cmdline"
+    if (present(style)) m_style = style
 
     if (abbrev == ' ') then
        if (2*len_trim(name) + 3 > len(buf)) then
           write (error_unit,'(a)') "Error in format_val_synopsis: need to increase buffer size"
           stop
        end if
-       buf = "--" // trim(name) // "=" // upcase(trim(name))
+       if (upcase(m_style) == "CMDLINE") then
+          buf = "--" // trim(name) // "=" // upcase(trim(name))
+       else if (upcase(m_style) == "FILE") then
+          buf = trim(name)
+       else
+          stop "Error: invalid formatting style."
+       end if
     else
        if (3*len_trim(name) + len_trim(abbrev) + 7 > len(buf)) then
           write (error_unit,'(a)') "Error in format_val_synopsis: need to increase buffer size"
           stop
        end if
-       buf = "-" // trim(abbrev) // " " // upcase(trim(name)) &
-            // ", " // "--" // trim(name) // "=" // &
-            upcase(trim(name))
+       if (upcase(m_style) == "CMDLINE") then
+          buf = "-" // trim(abbrev) // " " // upcase(trim(name)) &
+               // ", " // "--" // trim(name) // "=" // &
+               upcase(trim(name))
+       else if (upcase(m_style) == "FILE") then
+          buf = trim(name)//" (-"//trim(abbrev)//")"
+       else
+          stop "Error: invalid formatting style."
+       end if
     end if
   end subroutine format_val_synposis
 
 
-  subroutine format_flag_synopsis(buf,name,abbrev)
-    ! Status: reviewed
+  subroutine format_flag_synopsis(buf,name,abbrev,style)
     implicit none
     character(len=*) :: buf
     character(len=*), intent(in) :: name, abbrev
+    character(len=*), optional, intent(in) :: style
+
+    character(len=16) :: m_style
+
+    m_style = "cmdline"
+    if (present(style)) m_style = style
 
     if (abbrev == ' ') then
        if (len_trim(name) + 2 > len(buf)) then
           write (error_unit,'(a)') "Error in format_flag_synopsis: need to increase buffer size"
           stop
        end if
-       buf = "--" // trim(name)
+       if (upcase(m_style) == "CMDLINE") then
+          buf = "--" // trim(name)
+       else if (upcase(m_style) == "FILE") then
+          buf = trim(name)
+       else
+          stop "Error: invalid formatting style."
+       end if
     else
        if (len_trim(name) + len_trim(abbrev) + 5 > len(buf)) then
           write (error_unit,'(a)') "Error in format_flag_synopsis: need to increase buffer size"
           stop
        end if
-       buf = "-" // trim(abbrev) &
-            // ", " // "--" // trim(name)
+       if (upcase(m_style) == "CMDLINE") then
+          buf = "-" // trim(abbrev) // ", " // "--" // trim(name)
+       else if (upcase(m_style) == "FILE") then
+          buf = trim(name)//" (-"//trim(abbrev)//")"
+       else
+          stop "Error: invalid formatting style."
+       end if
     end if
   end subroutine format_flag_synopsis
 
@@ -870,10 +921,7 @@ contains
     integer :: ic
 
     ic = iachar(c)
-    ! Allow all ascii characters except non-printing characters, quotation
-    ! marks, space, '!', '#', '=' and '$'
-    is_name_char = (ic >= 37 .and. ic <= 38) .or. (ic >= 40 .and. ic <= 60) .or. &
-         (ic >= 62 .and. ic <= 95) .or. (ic >= 97 .and. ic <= 126)
+    is_name_char = (ic >= 37 .and. ic <= 126) .and. .not. in(c,name_char_excludes)
     ! TODO: Allow extended ascii?
   end function is_name_char
 
@@ -1026,7 +1074,7 @@ contains
   end subroutine print_args
 
 
-  function find_opt(opts,name,abbrev,dtype,assert) result(opt)
+  function find_opt(opts,name,abbrev,dtype,assert,group) result(opt)
     ! Find the struct for an existing option by either name or abbreviation.
     !
     ! 1. If dtype is present, will also assert that the datatype is the same as
@@ -1044,6 +1092,7 @@ contains
     character(len=1), optional, intent(in) :: abbrev
     integer,          optional, intent(in) :: dtype
     logical,          optional, intent(in) :: assert
+    character(len=*), optional, intent(in) :: group
 
     type(opt_t), pointer :: opt
     integer :: iopt
@@ -1064,12 +1113,16 @@ contains
     do iopt=1,opts%nopts
        ! Loop invariant: found == .false.
        opt => opts%opts(iopt)
+       if (present(group)) then
+          if (opt%group .ne. group) cycle
+       end if
        if (present(name)) then
           if (opt%name == name) found = .true.
        else if (present(abbrev)) then
           if (opt%abbrev == abbrev) found = .true.
        end if
        ! found <==> opt%name == name .or. (present(abbrev) .and. opt%abbrev == abbrev)
+       !            .and. opt%group == group
        if (found .and. present(dtype)) then
           if (dtype .ne. opt%dtype) then
              write (error_unit,'(a,a)') "find_opt(): Datatype doesn't match for option: ", trim(name)
@@ -1077,7 +1130,7 @@ contains
           end if
        end if
        ! found <==> [opt%name == name .or. (present(abbrev) .and. opt%abbrev == abbrev)]
-       !            .and. (present(dtype) --> opt%dtype == dtype)
+       !            .and. (present(dtype) --> opt%dtype == dtype) .and. opt%group == group
        if (found) return
        ! found == .false.
     end do
@@ -1085,12 +1138,16 @@ contains
     nullify(opt)
     if (m_assert) then
        if (present(name)) then
-          write (error_unit,'(a,a)') "find_opt(): Option doesn't exist: ", trim(name)
-          stop
+          write (error_unit,'(3a)',advance='no') "find_opt(): Option ", trim(name), " doesn't exist"
        else if (present(abbrev)) then
-          write (error_unit,'(a,a)') "find_opt(): Option doesn't exist: ", trim(abbrev)
-          stop
+          write (error_unit,'(3a)',advance='no') "find_opt(): Option ", trim(abbrev), " doesn't exist"
        end if
+       if (present(group)) then
+          write (error_unit,'(a,a)') " in group ", trim(group)
+       else
+          write (error_unit,'(a)') ""
+       end if
+       stop
     end if
   end function find_opt
 
@@ -1134,9 +1191,11 @@ contains
   end subroutine getarg_check
 
 
-  subroutine process_command_line(opts,ierr)
+  subroutine process_command_line(opts,ierr,group)
     ! Process the command-line arguments for the program, detecting options
     ! passed and storing their values in the options structure.
+    ! If group is passed, only options with this group name are processed. All
+    ! others are considered as non-existent.
     ! If the command-line arguments are invalid (options which don't exist,
     ! etc.), then ierr .ne. 0 is returned.
     ! If an internal buffer is too short, a message is printed and the program
@@ -1148,7 +1207,7 @@ contains
     !
     ! <program_name> <term1> ... <termN>
     !
-    ! Where <term> is
+    ! Where <term> is any of:
     !
     !  (1)  -<f1><f2>...<fN>
     !         where each <fi> is a 1-character abbreviation for a flag
@@ -1172,6 +1231,7 @@ contains
     implicit none
     type(options_t),  target, intent(inout) :: opts
     integer, intent(out) :: ierr
+    character(len=*), optional, intent(in) :: group
 
     type(opt_t), pointer :: opt
     character(len=opt_len) :: buf, name, val
@@ -1191,9 +1251,14 @@ contains
           do j=2,len_trim(buf)
              ! Find the option struct
              a = buf(j:j)
-             opt => find_opt(opts,abbrev=a,assert=.false.)
+             opt => find_opt(opts,abbrev=a,assert=.false.,group=group)
              if (.not. associated(opt)) then
-                write (error_unit,'(3a)') 'Error: unknown option: "-', buf(j:j), '"'
+                write (error_unit,'(3a)',advance='no') 'Error: unknown option "-', buf(j:j), '"'
+                if (present(group)) then
+                   write (error_unit,'(3a)') ' in group "', trim(group), '"'
+                else
+                   write (error_unit,'(a)') ''
+                end if
                 ierr = 1
                 return
              end if
@@ -1219,7 +1284,7 @@ contains
              end if
              ! Defined(val) .and. (IsFlag(opt) .or. (j == len_trim(buf))) .and. Defined(opt)
              ! Set the option value
-             call set_opt(opt,val,ierr)
+             call set_opt(opt,val,"error",ierr)
              if (ierr .ne. 0) return
              ! IsValid(val,opt)
           end do
@@ -1232,9 +1297,14 @@ contains
           end if
           ! IsNameString(name) .and. eqlc ∈ " =" .and. (eqlc == '=' ==> Defined(val))
           ! Find option
-          opt => find_opt(opts,name=name,assert=.false.)
+          opt => find_opt(opts,name=name,assert=.false.,group=group)
           if (.not. associated(opt)) then
-             write (error_unit,'(3a)') 'Error: unknown option: "--', trim(name), '"'
+             write (error_unit,'(3a)',advance='no') 'Error: unknown option "--', trim(name), '"'
+             if (present(group)) then
+                write (error_unit,'(3a)') ' in group "', trim(group), '"'
+             else
+                write (error_unit,'(a)') ''
+             end if
              ierr = 1
              return
           end if
@@ -1272,7 +1342,7 @@ contains
           end if
           ! Defined(opt) .and. Defined(val)
           ! Set the option value
-          call set_opt(opt,val,ierr)
+          call set_opt(opt,val,"error",ierr)
           if (ierr .ne. 0) return
           ! IsValid(val,opt) .and. ValueSet(val,opt)
        else if (buf == "--") then
@@ -1309,6 +1379,8 @@ contains
   end subroutine process_command_line
 
 
+
+
   subroutine check_required_options(opts,ierr)
     ! Status: proved
     implicit none
@@ -1322,7 +1394,7 @@ contains
     do iopt=1,opts%nopts
        opt => opts%opts(iopt)
        if (opt%required .and. .not. opt%found) then
-          write (error_unit,'(3a)') 'Error: missing required parameter: "--', &
+          write (error_unit,'(3a)') 'Error: missing required parameter: "', &
                trim(opt%name), '"'
           ierr = 2
           return
@@ -1417,7 +1489,7 @@ contains
 
     ! Case (ii): length = 1. Must not be a quote
     if (lt == 1) then
-       if (isquote(str)) then
+       if (is_quote(str)) then
           return
        else
           val = str(1:1)
@@ -1430,7 +1502,7 @@ contains
     ! flagging an error if the last nonblank character does not match the initial
     ! quote. If str does not begin with a quote, return str itself. (We do not
     ! skip leading spaces to unquote.)
-    if (isquote(str(1:1))) then
+    if (is_quote(str(1:1))) then
        if (str(lt:lt) .eq. str(1:1)) then
           ierr = 0
           val = str(2:lt-1)
@@ -1442,12 +1514,12 @@ contains
   end subroutine unquote
 
 
-  logical function isquote(c)
+  logical function is_quote(c)
     implicit none
     character(len=1), intent(in) :: c
 
-    isquote = c == '"' .or. c == "'"
-  end function isquote
+    is_quote = c == '"' .or. c == "'"
+  end function is_quote
 
 
   function count_leading(str,p) result(count)
@@ -1519,7 +1591,7 @@ contains
     character(len=1), optional, intent(in) :: abbrev
 
     if (opt%name == name) then
-       write (error_unit,'(3a)') 'Error: duplicate definition of option "--', &
+       write (error_unit,'(3a)') 'Error: duplicate definition of option "', &
             trim(name), '"'
        stop
     end if
@@ -1558,5 +1630,292 @@ contains
     end if
     str = opts%args(index)
   end subroutine get_arg
+
+
+  ! ** INPUT FILE PROCESSING ************************************************* !
+
+
+  subroutine process_input_file(opts,filename,ierr,group,overwrite,delim_char,comment_chars)
+    ! Read input options from file
+    ! Input/output:
+    !   opts: Input options structure. Input file is taken from opts%arg1. On
+    !         exit, fields are updated according to values in the file.
+    ! Output:
+    !   ierr:  0 upon success, nonzero if an error occured
+    ! Notes:
+    !   Blank lines and comments
+    use iso_fortran_env, only: input_unit
+    implicit none
+    type(options_t), target, intent(inout) :: opts
+    character(len=*), intent(in) :: filename
+    integer, intent(out)   :: ierr
+    character(len=*), optional, intent(in) :: group, overwrite
+    character(len=1), optional, intent(in) :: delim_char
+    character(len=2), optional, intent(in) :: comment_chars
+
+    type(opt_t), pointer :: opt
+    integer :: unit, idx, nchar, status
+    character(len=1024) :: val, name
+    character :: c
+
+    character(len=1) :: m_delim_char
+    character(len=2) :: m_comment_chars
+    character(len=8) :: m_overwrite
+
+    m_delim_char = ':'
+    m_comment_chars = '#!'
+    m_overwrite = "ERROR"
+    if (present(delim_char)) m_delim_char = delim_char
+    if (present(comment_chars)) m_comment_chars = comment_chars
+    if (present(overwrite)) m_overwrite = overwrite
+
+    if (is_name_char(m_delim_char)) then
+       stop "Error: invalid delim character -- must not be a name character."
+    end if
+    do idx=1,2
+       if (is_name_char(m_comment_chars(idx:idx))) then
+          stop "Error: invalid comment character -- must not be a name character."
+       end if
+    end do
+
+    ierr = 1
+    unit=10
+    open(unit,file=filename,access='stream',status='old')
+
+    idx = 1
+    status = 0
+    do while (status .eq. 0)
+       ! Skip blanks and newlines
+       call skip_chars(unit,blank//crlf,idx,nchar,status)
+       if (status .ne. 0) exit
+       ! Skip comment lines
+       call peek(unit,idx,c,status)
+       if (status .ne. 0) exit
+       if (in(c,m_comment_chars)) then
+          call skip_until_char(unit,crlf,idx,nchar,status)
+          cycle
+       end if
+
+       ! Ok, at beginning of non-blank line, read option & value
+       call parse_opt(unit,m_delim_char,m_comment_chars,idx,name,val,status)
+       if (status .ne. 0) exit
+
+       ! Lookup & set the option
+       opt => find_opt(opts,name=name,assert=.false.,group=group)
+       if (.not. associated(opt)) then
+          write (error_unit,'(3a)',advance='no') 'Error: unknown option "', trim(name), '"'
+          if (present(group)) then
+             write (error_unit,'(3a)') ' in group "', trim(group), '"'
+          else
+             write (error_unit,'(a)') ''
+          end if
+          return
+       end if
+       call set_opt(opt,val,m_overwrite,status)
+       if (status .ne. 0) return
+
+       ! Go to end of line
+       call skip_until_char(unit,crlf,idx,nchar,status)
+    end do
+    if (status > 0) then
+       ierr = status
+    else
+       ierr = 0
+    end if
+  end subroutine process_input_file
+
+
+  subroutine parse_opt(unit,delim_char,comment_chars,idx,name,val,ierr)
+    ! Parse an option from an input file, allowing for comments at the end of the line.
+    ! Input:
+    !   str: string in the form
+    !          <name><delim_char><value>[<comment_char><...>]
+    !        where blanks may appear between any of the elements above. If
+    !        <value> is a quoted string, only the content between the quotes is
+    !        returned. Quoted strings may extend over several lines.
+    !   delim_char:     Character to separate names from values (usually ':' or '=')
+    !   comment_chars:  Characters considered to begin comments (usually '#' or '!')
+    ! Input/output:
+    !   idx:  Current position in file. Incremented for each character read.
+    ! Output:
+    !   name: The name of the option
+    !   val:  The value
+    !   ierr: Upon success, 0. Otherwise 1.
+    implicit none
+    integer,          intent(in) :: unit
+    character(len=1), intent(in) :: delim_char
+    character(len=*), intent(in) :: comment_chars
+    integer,          intent(inout) :: idx
+    character(len=*), intent(out) :: name, val
+    integer,          intent(out) :: ierr
+
+    character(len=len(comment_chars)+2) :: end_chars
+    integer :: nchar, ios, beg
+
+    character :: c
+
+    ierr = 1
+    val = ''
+    name = ''
+    beg = idx
+
+    call skip_chars(unit,blank,idx,nchar,ios)
+    if (ios .ne. 0) return
+
+    call read_while(unit,is_name_char,idx,name,nchar,ios)
+    if (nchar .eq. 0) then
+       write (error_unit,'(a,i0,a)') 'Error: expected option name at position ', &
+            idx, ' of input file'
+       return
+    end if
+    if (ios < 0) then
+       write (error_unit,'(3a)') 'Error: unexpected end of file after "', &
+            trim(name), '" in input file (expected option value)'
+       return
+    end if
+    if (ios > 0) return
+
+    call skip_chars(unit,blank,idx,nchar,ios)
+    if (ios < 0) then
+       write (error_unit,'(3a)') 'Error: unexpected end of file found while&
+            &processing option "', trim(name), '" in input file'
+       return
+    end if
+    if (ios > 0) return
+
+    call skip_chars(unit,delim_char,idx,nchar,ios)
+    if (nchar .eq. 0) then
+       write (error_unit,'(3a,i0,a)',advance='no') &
+            "Error: expected '", delim_char, ''' at position ', idx, ' of input file'
+       if (len_trim(name) > 0) &
+            write (error_unit,'(3a)',advance='no') ' (after "', trim(name), '")'
+       write (error_unit,'(a)') ''
+       return
+    end if
+
+    call skip_chars(unit,blank,idx,nchar,ios)
+    if (ios > 0) return
+    if (ios < 0) then
+       ! End of file -- ok
+       ierr = ios
+       return
+    end if
+
+    call peek(unit,idx,c,ios)
+    if (ios .ne. 0) stop "Unexpected error in parse_opt" ! Expected a character here
+    if (c == '"' .or. c == "'") then
+       ! End of the value is the next occurence of the same quote -- no exceptions
+       idx = idx + 1
+       call read_until_char(unit,c,idx,val,nchar,ios)
+       if (ios > 0) return
+       if (ios < 0) then
+          write (error_unit,'(2a)') 'Error: unterminated quote found while reading&
+               & value of option "', trim(name), '"'
+       end if
+       idx = idx + 1
+    else
+       ! No quote: read until end of line, comment character, or end of file
+       end_chars = comment_chars//crlf
+       call read_until_char(unit,end_chars,idx,val,nchar,ios)
+       if (ios > 0) return
+    end if
+    ierr = ios
+  end subroutine parse_opt
+
+
+  subroutine peek(unit,idx,c,ios)
+    implicit none
+    integer, intent(in) :: unit
+    integer, intent(inout) :: idx
+    character, intent(out) :: c
+    integer, intent(out) :: ios
+
+    read (unit,pos=idx,iostat=ios) c
+  end subroutine peek
+
+
+  subroutine read_while(unit,p,idx,buf,nchar,ios)
+    implicit none
+    integer, intent(in) :: unit
+    interface
+       logical function p(c)
+         character(len=1), intent(in) :: c
+       end function p
+    end interface
+    integer, intent(inout) :: idx
+    character(len=*), intent(out) :: buf
+    integer, intent(out) :: nchar, ios
+
+    character :: c
+
+    nchar = 0
+    read (unit,pos=idx,iostat=ios) c
+    do while (ios .eq. 0 .and. p(c))
+       nchar = nchar + 1
+       buf(nchar:nchar) = c
+       idx = idx + 1
+       read (unit,pos=idx,iostat=ios) c
+    end do
+  end subroutine read_while
+
+
+  subroutine read_until_char(unit,chars,idx,buf,nchar,ios)
+    implicit none
+    integer, intent(in) :: unit
+    character(len=*), intent(in) :: chars
+    integer, intent(inout) :: idx
+    character(len=*), intent(out) :: buf
+    integer, intent(out) :: nchar, ios
+
+    character :: c
+
+    nchar = 0
+    read (unit,pos=idx,iostat=ios) c
+    do while (ios .eq. 0 .and. .not. in(c,chars))
+       nchar = nchar + 1
+       buf(nchar:nchar) = c
+       idx = idx + 1
+       read (unit,pos=idx,iostat=ios) c
+    end do
+  end subroutine read_until_char
+
+
+  subroutine skip_until_char(unit,chars,idx,nchar,ios)
+    implicit none
+    integer, intent(in) :: unit
+    character(len=*), intent(in) :: chars
+    integer, intent(inout) :: idx
+    integer, intent(out) :: nchar, ios
+
+    character :: c
+
+    nchar = 0
+    read (unit,pos=idx,iostat=ios) c
+    do while (ios .eq. 0 .and. .not. in(c,chars))
+       nchar = nchar + 1
+       idx = idx + 1
+       read (unit,pos=idx,iostat=ios) c
+    end do
+  end subroutine skip_until_char
+
+
+  subroutine skip_chars(unit,chars,idx,nchar,ios)
+    implicit none
+    integer, intent(in) :: unit
+    character(len=*), intent(in) :: chars
+    integer, intent(inout) :: idx
+    integer, intent(out) :: nchar, ios
+
+    character :: c
+
+    nchar = 0
+    read (unit,pos=idx,iostat=ios) c
+    do while (ios .eq. 0 .and. in(c,chars))
+       nchar = nchar + 1
+       idx = idx + 1
+       read (unit,pos=idx,iostat=ios) c
+    end do
+  end subroutine skip_chars
+
 
 end module options
