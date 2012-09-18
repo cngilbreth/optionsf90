@@ -8,8 +8,7 @@ program example2
   real(8) :: beta
 
   ! Define options
-  call define_flag(opts,"help",abbrev='h',&
-       description="Print this help message.",group="cmdline")
+  call define_help_option(opts,print_help)
   call define_flag(opts,"fast",abbrev='f',&
        description="Do it the fast way!",group="cmdline")
   call define_option_integer(opts,"Nt",16,description="(integer) Number of time slices",&
@@ -19,26 +18,23 @@ program example2
 
   ! Process command line
   call process_command_line(opts,ierr)
-  if (ierr .ne. 0) goto 99
-  if (option_found(opts,"help")) then
-     call print_help()
-     stop
-  end if
+  if (ierr .ne. 0) stop
   call get_num_args(opts,nargs)
   if (nargs .ne. 1) then
      write (*,'(a)') "Error: expected exactly 1 argument for the input file."
-     goto 99
+     write (*,'(a)') "Try using -h for more info."
+     stop
   end if
 
   ! Read input file
   call get_arg(opts,1,inputfile,ierr)
-  if (ierr .ne. 0) goto 99
+  if (ierr .ne. 0) stop
   call process_input_file(opts,inputfile,ierr,group='inputfile')
-  if (ierr .ne. 0) goto 99
+  if (ierr .ne. 0) stop
 
   ! Check options
   call check_required_options(opts,ierr)
-  if (ierr .ne. 0) goto 99
+  if (ierr .ne. 0) stop
 
   ! Do the calculations ...
   call get_option_integer(opts,"Nt",nt)
@@ -46,15 +42,11 @@ program example2
   write (*,'(a,i0)') "Value of Nt: ", nt
   write (*,'(a,es10.3)') "Value of beta: ", beta
 
-  ! Done
-  return
-
-99 write (*,'(a)') "Try using -h for more info."
-
 contains
 
-  subroutine print_help()
+  subroutine print_help(opts)
     implicit none
+    type(options_t), intent(in) :: opts
     write (*,'(a)') "example2: Compute some useful things."
     write (*,'(a)') "Usage: example2 [options] <input file>"
     write (*,'(a)') ""

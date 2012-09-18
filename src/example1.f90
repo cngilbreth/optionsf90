@@ -6,7 +6,7 @@ program example1
   integer :: ierr, nt
   real(8) :: beta
 
-  call define_flag(opts,"help",abbrev="h",description="Print this help message.")
+  call define_help_option(opts,print_help)
   call define_option_integer(opts,"Nt",16,description="Number of time slices")
   call define_option_real(opts,"beta",0.d0,abbrev="b",min=1.d0,max=10.d0,&
           description="Inverse temperature",required=.true.)
@@ -14,22 +14,9 @@ program example1
       &This option has a longer description in order to demonstrate line wrapping.")
 
   call process_command_line(opts,ierr)
-  if (ierr .ne. 0) then
-     write (*,'(a)') "Try using -h for more info."
-     stop
-  end if
-  if (option_found(opts,"help")) then
-     write (*,'(a)') "example1: Compute some useful things."
-     write (*,'(a)') "Usage: example1 [options]"
-     write (*,'(a)') ""
-     call print_options(opts)
-     stop
-  end if
+  if (ierr .ne. 0) stop
   call check_required_options(opts,ierr)
-  if (ierr .ne. 0) then
-     write (*,'(a)') "Try using -h for more info."
-     stop
-  end if
+  if (ierr .ne. 0) stop
 
   ! Do the calculations ...
   call get_option_integer(opts,"Nt",nt)
@@ -37,4 +24,16 @@ program example1
   write (*,'(a,i0)') "Value of Nt: ", nt
   write (*,'(a,es10.3)') "Value of beta: ", beta
   ! Etc
+
+contains
+
+  subroutine print_help(opts)
+    type(options_t), intent(in) :: opts
+    write (*,'(a)') "example1: Compute some useful things."
+    write (*,'(a)') "Usage: example1 [options]"
+    write (*,'(a)') ""
+    write (*,'(a)') "Options:"
+    call print_options(opts)
+  end subroutine print_help
+
 end program example1

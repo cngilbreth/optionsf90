@@ -3,7 +3,10 @@ FC = gfortran -Wall -pedantic -fcheck=all -g
 test: options.o test.o
 	$(FC) $+ -o $@
 
-example: options.o example.o
+example1: options.o example1.o
+	$(FC) $+ -o $@
+
+example2: options.o example2.o
 	$(FC) $+ -o $@
 
 clean:

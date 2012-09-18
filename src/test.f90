@@ -31,7 +31,7 @@ program testopts
   real(8) :: r1, r2
   character(len=1024) :: str1, inputfile, group1_inputfile, overwrite
 
-  call define_flag(opts,'help','h',description="Print this help message.")
+  call define_help_option(opts,print_help)
   call define_option_integer(opts,"n1",16,abbrev='a',description="An integer option. &
        &This one has no min or max values defined.")
   call define_option_integer(opts,"n2",16,abbrev='b',min=-10,max=12,&
@@ -63,7 +63,6 @@ program testopts
   call define_option_integer(opts,'intr',7,abbrev='q',&
        description="This is a required option, intended to test check_required_opts.",&
        required=.true.)
-
   ! This option is used by the test
   call define_option_string(opts,'inputfile','',abbrev='i',description="Input file. &
        &Read options from this file after processing command-line options. Will &
@@ -71,10 +70,8 @@ program testopts
   ! So is this
   call define_option_string(opts,'overwrite','yes',abbrev='o',description=&
        &"Overwrite command-line options when reading from input file")
-
   call define_option_string(opts,'group1_inputfile','',abbrev='g',description=&
        &"Input file for group1 options.")
-
   ! Define options in a group "group1"
   call define_flag(opts,'flag1_g1',description="This is a flag, defined in&
        & the group ""group1"".", group='group1')
@@ -82,11 +79,7 @@ program testopts
        & defined in the group ""group1"".",group='group1')
 
   call process_command_line(opts,ierr)
-  if (ierr .ne. 0) stop "Try using -h for more info."
-  if (option_found(opts,"help")) then
-     call print_options(opts)
-     stop
-  end if
+  if (ierr .ne. 0) stop
 
   call get_option_string(opts,'inputfile',inputfile)
   call get_option_string(opts,'overwrite',overwrite)
@@ -111,7 +104,7 @@ program testopts
 
   write (*,'(a)') "* Test of check_required_opts:"
   call check_required_options(opts,ierr)
-  if (ierr .ne. 0) stop "Try using -h for more info."
+  if (ierr .ne. 0) stop
   write (*,*) ""
 
   write (*,'(a)') "* Test of print_option_values:"
@@ -164,4 +157,19 @@ program testopts
   write (*,*) ""
   write (*,'(a)') "* Test of get_arg and get_num_args (via print_args):"
   call print_args(opts)
+
+contains
+
+  subroutine print_help(opts)
+    implicit none
+    type(options_t), intent(in) :: opts
+
+    write (*,'(a)') 'Usage: test [options]'
+    write (*,'(a)') 'This is a program for testing the options.f90 library.'
+    write (*,'(a)') 'It is meant to be run from test.sh.'
+    write (*,'(a)') ''
+    write (*,'(a)') 'Available options:'
+    call print_options(opts)
+  end subroutine print_help
+
 end program testopts
