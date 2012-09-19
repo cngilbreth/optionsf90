@@ -34,7 +34,7 @@ module options
   integer, parameter :: maxargs = 32
   ! For formatting output
   integer, parameter :: name_column  = 3
-  integer, parameter :: descr_column = 28
+  integer, parameter :: descr_column = 30
   integer, parameter :: max_column   = 90
   ! Kind for real options
   integer, parameter :: rk = selected_real_kind(p=15)
@@ -133,7 +133,7 @@ module options
   ! ** Public interface functions **********************************************
 
   public :: define_option_integer, define_option_real, define_option_logical, &
-       define_option_string, define_flag, define_help_option
+       define_option_string, define_flag, define_help_flag
   public :: get_option_integer, get_option_real, get_option_logical, &
        get_option_string, get_flag
   public :: print_option, print_options, print_option_values, print_args
@@ -603,7 +603,7 @@ contains
   ! ** GENERAL ROUTINES ********************************************************
 
 
-  subroutine define_help_option(opts,help_routine,group)
+  subroutine define_help_flag(opts,help_routine,group)
     implicit none
     type(options_t), target, intent(inout) :: opts
     interface
@@ -617,7 +617,7 @@ contains
     call define_flag(opts,"help",abbrev='h',description="Print this help message.",&
          group=group)
     opts%help_routine => help_routine
-  end subroutine define_help_option
+  end subroutine define_help_flag
 
 
   logical function is_logical(str)
@@ -1645,7 +1645,6 @@ contains
 
 
   subroutine get_num_args(opts,num)
-    ! Status: reviewed
     implicit none
     type(options_t), target, intent(in) :: opts
     integer, intent(out) :: num
@@ -1655,7 +1654,6 @@ contains
 
 
   subroutine get_arg(opts,index,str,ierr)
-    ! Status: reviewed
     implicit none
     type(options_t), intent(in) :: opts
     integer, intent(in) :: index
@@ -1939,6 +1937,13 @@ contains
 
 
   subroutine skip_chars(unit,chars,idx,nchar,ios)
+    ! Postconditions:
+    !   Let beg := value of 'idx' on entry. Then
+    !     i.   The characters at positions beg, beg+1, ..., idx-1 are in 'chars',
+    !     ii.  nchar = the number of characters skipped
+    !                = idx - beg,
+    !     iii. If ios .eq. 0, the character at position 'idx' is not in 'chars'.
+    ! Status: proved
     implicit none
     integer, intent(in) :: unit
     character(len=*), intent(in) :: chars
@@ -1949,11 +1954,20 @@ contains
 
     nchar = 0
     read (unit,pos=idx,iostat=ios) c
+    ! beg := idx
+    ! 1. in(file[beg:idx-1],chars)
+    ! 2. (ios .eq. 0) --> c = file[idx]
     do while (ios .eq. 0 .and. in(c,chars))
+       ! a. in(file[idx:idx],chars)
+       !    ==> in(file[beg:idx],chars)
        nchar = nchar + 1
        idx = idx + 1
+       ! 1. in(file[beg:idx-1],chars)
        read (unit,pos=idx,iostat=ios) c
+       ! 2. (ios .eq. 0) --> c = file[idx]
     end do
+    ! 1. in(file[beg:idx-1],chars)
+    ! 2. ios .ne. 0 .or. in(c,chars)
   end subroutine skip_chars
 
 

@@ -8,7 +8,7 @@ program example2
   real(8) :: beta
 
   ! Define options
-  call define_help_option(opts,print_help)
+  call define_help_flag(opts,print_help,group="cmdline")
   call define_flag(opts,"fast",abbrev='f',&
        description="Do it the fast way!",group="cmdline")
   call define_option_integer(opts,"Nt",16,description="(integer) Number of time slices",&
@@ -36,7 +36,7 @@ program example2
   call check_required_options(opts,ierr)
   if (ierr .ne. 0) stop
 
-  ! Do the calculations ...
+  ! Do the work ...
   call get_option_integer(opts,"Nt",nt)
   call get_option_real(opts,"beta",beta)
   write (*,'(a,i0)') "Value of Nt: ", nt
