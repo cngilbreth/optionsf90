@@ -31,3 +31,19 @@ optparse module. Some features:
 
 For more info, see http://infty.net/options/options.html
 
+## To do
+
+Some goals for future versions of this library:
+
+  1. Include support for commands, rather than just options, on the command
+     line.
+
+  2. Provide a mechanism to automatically associate variables with options, and
+     set them when read.
+
+       call define_flag(opts,"exp",abbrev='e', var=e)
+       call process_command_line(opts, ierr)
+  
+     So the variable e will be set appropriately in the second line.
+
+
