@@ -70,16 +70,20 @@ module options
      ! For integer options
      integer(ik) :: ival
      integer(ik) :: imin, imax
+     integer(ik), pointer :: ivar
 
      ! For logical options and flags
      logical :: lval
+     logical, pointer :: lvar
 
      ! For real options
      real(rk) :: rval
      real(rk) :: rmin, rmax
+     real(rk), pointer :: rvar
 
      ! For string/character options
      character (len=opt_len)   :: cval
+     character (len=opt_len), pointer :: cvar
   end type opt_t
 
   ! Predicate:
@@ -150,7 +154,7 @@ contains
 
   ! ** REAL OPTIONS ********************************************************** !
 
-  subroutine define_option_real(opts,name,default,min,max,abbrev,required,description,group)
+  subroutine define_option_real(opts,name,default,min,max,abbrev,required,description,group,var)
     ! Status: Proved
     ! Postcondition: Defined(opt)
     implicit none
@@ -162,6 +166,7 @@ contains
     logical,          optional, intent(in) :: required
     character(len=*), optional, intent(in) :: description
     character(len=*), optional, intent(in) :: group
+    real(rk),         optional, target :: var
 
     type(opt_t), pointer :: opt
 
@@ -174,6 +179,7 @@ contains
 
     if (present(min)) opt%rmin = min
     if (present(max)) opt%rmax = max
+    if (present(var)) opt%rvar => var
   end subroutine define_option_real
 
 
@@ -217,6 +223,9 @@ contains
        write (error_unit,'(3(a,es15.8))') "Value: ", opt%rval, ", min: ", opt%rmin, ", max: ", opt%rmax
        return
     end if
+    if (associated(opt%rvar)) then
+       opt%rvar = opt%rval
+    end if
     ierr = 0
   end subroutine set_value_real
 
@@ -238,7 +247,7 @@ contains
   ! ** INTEGER OPTIONS ******************************************************* !
 
 
-  subroutine define_option_integer(opts,name,default,min,max,abbrev,required,description,group)
+  subroutine define_option_integer(opts,name,default,min,max,abbrev,required,description,group,var)
     ! Status: reviewed
     implicit none
     type(options_t), target,  intent(inout) :: opts
@@ -249,6 +258,7 @@ contains
     logical,          optional, intent(in) :: required
     character(len=*), optional, intent(in) :: description
     character(len=*), optional, intent(in) :: group
+    integer,          optional, target     :: var
 
     type(opt_t), pointer :: opt
 
@@ -261,6 +271,7 @@ contains
 
     if (present(min)) opt%imin = min
     if (present(max)) opt%imax = max
+    if (present(var)) opt%ivar => var
   end subroutine define_option_integer
 
 
@@ -311,6 +322,9 @@ contains
     end if
     ! opt%ival >= opt%imin .and. opt%ival <= opt%imax
     ! valid(opt%ival) .and. is_integer(valstr) .and. InBounds(opt%ival)
+    if (associated(opt%ivar)) then
+       opt%ivar = opt%ival
+    end if
     ierr = 0
   end subroutine set_value_integer
 
@@ -332,7 +346,7 @@ contains
   ! ** LOGICAL OPTIONS ******************************************************* !
 
 
-  subroutine define_option_logical(opts,name,default,abbrev,required,description,group)
+  subroutine define_option_logical(opts,name,default,abbrev,required,description,group,var)
     ! Status: reviewed
     implicit none
     type(options_t),  target, intent(inout) :: opts
@@ -342,6 +356,7 @@ contains
     logical,          optional, intent(in) :: required
     character(len=*), optional, intent(in) :: description
     character(len=*), optional, intent(in) :: group
+    logical,          optional, target     :: var
 
     type(opt_t), pointer :: opt
 
@@ -349,6 +364,7 @@ contains
 
     opt%dtype = T_LOGICAL
     opt%lval  = default
+    if (present(var)) opt%lvar => var
   end subroutine define_option_logical
 
 
@@ -385,6 +401,9 @@ contains
        write (error_unit,'(3a)') "Error: couldn't convert ", trim(valstr), " to a logical value."
        return
     end if
+    if (associated(opt%lvar)) then
+       opt%lvar = opt%lval
+    end if
     ierr = 0
   end subroutine set_value_logical
 
@@ -406,7 +425,7 @@ contains
   ! ** STRING OPTIONS ******************************************************** !
 
 
-  subroutine define_option_string(opts,name,default,abbrev,required,description,group)
+  subroutine define_option_string(opts,name,default,abbrev,required,description,group,var)
     ! Status: reviewed
     implicit none
     type(options_t),  target, intent(inout) :: opts
@@ -416,6 +435,7 @@ contains
     logical,          optional, intent(in) :: required
     character(len=*), optional, intent(in) :: description
     character(len=*), optional, intent(in) :: group
+    character(len=*), optional, target :: var
 
     type(opt_t), pointer :: opt
 
@@ -423,6 +443,7 @@ contains
 
     opt%dtype = T_STRING
     opt%cval  = default
+    if (present(var)) opt%cvar => var
   end subroutine define_option_string
 
 
@@ -459,6 +480,9 @@ contains
        return
     end if
     opt%cval = valstr
+    if (associated(opt%cvar)) then
+       opt%cvar = opt%cval
+    end if
     ierr = 0
   end subroutine set_value_string
 
@@ -480,7 +504,7 @@ contains
   ! ** FLAGS ***************************************************************** !
 
 
-  subroutine define_flag(opts,name,abbrev,description,group)
+  subroutine define_flag(opts,name,abbrev,description,group,var)
     ! Status: reviewed
     implicit none
     type(options_t),  target, intent(inout) :: opts
@@ -488,6 +512,7 @@ contains
     character(len=*), optional, intent(in) :: abbrev
     character(len=*), optional, intent(in) :: description
     character(len=*), optional, intent(in) :: group
+    logical,          optional, target     :: var
 
     type(opt_t), pointer :: opt
 
@@ -495,6 +520,10 @@ contains
 
     opt%dtype = T_FLAG
     opt%lval  = .false.
+    if (present(var)) then
+       opt%lvar => var
+       opt%lvar = opt%lval
+    end if
   end subroutine define_flag
 
 
@@ -778,6 +807,10 @@ contains
     opt%found = .false.
     opt%dtype = T_NONE
     opt%group = ''
+    nullify(opt%ivar)
+    nullify(opt%lvar)
+    nullify(opt%rvar)
+    nullify(opt%cvar)
     if (present(abbrev)) opt%abbrev = abbrev
     if (present(description)) opt%descr = description
     if (present(group)) opt%group = group
@@ -1256,13 +1289,13 @@ contains
     ! Status: reviewed
     implicit none
     type(options_t),  target, intent(inout) :: opts
-    integer, intent(out) :: ierr
+    integer, optional, intent(out) :: ierr
     character(len=*), optional, intent(in) :: group
 
     type(opt_t), pointer :: opt
     character(len=opt_len) :: buf, name, val
     character(len=1) :: eqlc, a
-    integer :: iarg, max, j
+    integer :: iarg, max, j, mierr
     logical :: help
 
     max = command_argument_count()
@@ -1271,8 +1304,8 @@ contains
     iarg = 0
     do while (iarg < max)
        iarg = iarg + 1
-       call getarg_check(iarg,buf,ierr)
-       if (ierr .ne. 0) goto 99
+       call getarg_check(iarg,buf,mierr)
+       if (mierr .ne. 0) goto 99
        if (buf(1:1) == '-' .and. is_abbrev_char(buf(2:2))) then
           ! Short options: Case (1) or (2)
           do j=2,len_trim(buf)
@@ -1286,7 +1319,7 @@ contains
                 else
                    write (error_unit,'(a)') ''
                 end if
-                ierr = 1
+                mierr = 1
                 goto 99
              end if
              ! associated(opt) => Defined(opt)
@@ -1300,25 +1333,25 @@ contains
                 iarg = iarg + 1
                 if (j .ne. len_trim(buf) .or. iarg > max) then
                    write (error_unit,'(3a)') 'Error: Option "-', buf(j:j), '" requires an argument.'
-                   ierr = 1
+                   mierr = 1
                    goto 99
                 end if
                 ! j == len_trim(buf) .and. iarg <= max
-                call getarg_check(iarg,val,ierr)
-                if (ierr .ne. 0) goto 99
-                ! ierr .eq. 0 => Defined(val) (may be blank)
+                call getarg_check(iarg,val,mierr)
+                if (mierr .ne. 0) goto 99
+                ! mierr .eq. 0 => Defined(val) (may be blank)
                 ! j == len_trim(buf) .and. Defined(val)
              end if
              ! Defined(val) .and. (IsFlag(opt) .or. (j == len_trim(buf))) .and. Defined(opt)
              ! Set the option value
-             call set_opt(opt,val,"error",ierr)
-             if (ierr .ne. 0) goto 99
+             call set_opt(opt,val,"error",mierr)
+             if (mierr .ne. 0) goto 99
              ! IsValid(val,opt)
           end do
        else if (buf(1:2) == '--' .and. is_name_char(buf(3:3))) then
           ! Long options
-          call parse_long_option(buf,name,eqlc,val,ierr)
-          if (ierr .ne. 0) then
+          call parse_long_option(buf,name,eqlc,val,mierr)
+          if (mierr .ne. 0) then
              write (error_unit,'(2a)') 'Error: invalid option string "', trim(buf), '"'
              goto 99
           end if
@@ -1332,7 +1365,7 @@ contains
              else
                 write (error_unit,'(a)') ''
              end if
-             ierr = 1
+             mierr = 1
              goto 99
           end if
           ! Defined(opt)
@@ -1354,11 +1387,11 @@ contains
                 iarg = iarg + 1
                 if (iarg > max) then
                    write (error_unit,'(3a)') 'Error: option "--', trim(name), '" requires an argument.'
-                   ierr = 1
+                   mierr = 1
                    goto 99
                 end if
-                call getarg_check(iarg,val,ierr)
-                if (ierr .ne. 0) goto 99
+                call getarg_check(iarg,val,mierr)
+                if (mierr .ne. 0) goto 99
                 ! Defined(val)
              else
                 ! eqlc == '='. so Defined(val)
@@ -1369,15 +1402,15 @@ contains
           end if
           ! Defined(opt) .and. Defined(val)
           ! Set the option value
-          call set_opt(opt,val,"error",ierr)
-          if (ierr .ne. 0) goto 99
+          call set_opt(opt,val,"error",mierr)
+          if (mierr .ne. 0) goto 99
           ! IsValid(val,opt) .and. ValueSet(val,opt)
        else if (buf == "--") then
           ! Case (7) Stop processing options
           do while (iarg < max)
              iarg = iarg + 1
-             call getarg_check(iarg,buf,ierr)
-             if (ierr .ne. 0) goto 99
+             call getarg_check(iarg,buf,mierr)
+             if (mierr .ne. 0) goto 99
              call store_arg(opts,buf)
           end do
        else if (buf(1:1) == '-' .and. in(buf(2:2), '-0123456789.')) then
@@ -1385,7 +1418,7 @@ contains
           if (.not. is_real(buf)) then
              ! Note is_integer(buf) ==> is_real(buf), so we just check the latter
              write (error_unit,'(3a)') 'Error: expected a numeric argument: "', trim(buf), '"'
-             ierr = 1
+             mierr = 1
              goto 99
           end if
           call store_arg(opts,buf)
@@ -1398,21 +1431,27 @@ contains
        else
           ! Anything else
           write (error_unit,'(3a)') 'Error: invalid argument: "', trim(buf), '"'
-          ierr = 1
+          mierr = 1
           goto 99
        end if
     end do
-    ierr = 0
+    mierr = 0
     if (associated(opts%help_routine)) then
        call get_flag(opts,'help',help)
        if (help) then
           call opts%help_routine(opts)
-          ierr = 3
+          mierr = 3
        end if
     end if
+    if (present(ierr)) ierr = mierr
     return
 99  if (associated(opts%help_routine)) then
        write (error_unit,'(a)') "Try using -h for more info."
+    end if
+    if (.not. present(ierr)) then
+       stop
+    else
+       ierr = mierr
     end if
   end subroutine process_command_line
 
@@ -1421,24 +1460,29 @@ contains
     ! Status: proved
     implicit none
     type(options_t),  target, intent(in) :: opts
-    integer, intent(out) :: ierr
+    integer, optional, intent(out) :: ierr
 
     type(opt_t), pointer :: opt
-    integer :: iopt
+    integer :: iopt, mierr
 
-    ierr = 0
+    mierr = 0
     do iopt=1,opts%nopts
        opt => opts%opts(iopt)
        if (opt%required .and. .not. opt%found) then
           write (error_unit,'(3a)') 'Error: missing required parameter: "', &
                trim(opt%name), '"'
-          ierr = 2
+          mierr = 2
           if (associated(opts%help_routine)) then
              write (error_unit,'(a)') "Try using -h for more info."
           end if
-          return
+          goto 99
        end if
     end do
+99  if (present(ierr)) then
+       ierr = mierr
+    else
+       if (mierr .ne. 0) stop
+    end if
   end subroutine check_required_options
 
 
