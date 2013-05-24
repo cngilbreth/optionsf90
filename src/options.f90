@@ -1,6 +1,6 @@
 ! options.f90: Module for options processing
 ! http://infty.net/options/options.html
-! v0.8b2
+! v0.8.1
 !
 ! Copyright (c) 2009, 2012 Christopher N. Gilbreth
 !
@@ -29,6 +29,9 @@ module options
 
   ! Can customize these parameters as desired:
 
+  ! String lengths
+  integer, parameter, public :: opt_len = 256
+  integer, parameter, public :: descr_len = 2048
   ! Max number of options & positional arguments
   integer, parameter :: maxopts = 32
   integer, parameter :: maxargs = 32
@@ -40,14 +43,11 @@ module options
   integer, parameter :: rk = selected_real_kind(p=15)
   ! Kind for integer options
   integer, parameter :: ik = kind(1)
-  ! String lengths
-  integer, parameter :: opt_len = 256
-  integer, parameter :: descr_len = 2048
 
   ! The following shouldn't be changed unless you really know what you're doing
-  character(len=2) :: crlf = achar(13)//achar(10) ! newline characters
-  character(len=2) :: blank = ' '//achar(9)  ! space or tab
-  character(len=8) :: name_char_excludes = '''" !#=:$'
+  character(len=2), parameter :: crlf = achar(13)//achar(10) ! newline characters
+  character(len=2), parameter :: blank = ' '//achar(9)  ! space or tab
+  character(len=8), parameter :: name_char_excludes = '''" !#=:$'
 
   ! ** Option data types *******************************************************
 
@@ -89,11 +89,11 @@ module options
   ! Predicate:
   ! Defined(opt) :=
   !   Defined(name,abbrev,descr,required,found,dtype,group)
-  !   .and. (dtype == T_INTEGER ==> Defined(ival,imin,imax))
-  !   .and. (dtype == T_REAL ==> Defined(rval,rmin,rmax))
-  !   .and. (dtype == T_LOGICAL ==> Defined(lval))
-  !   .and. (dtype == T_STRING ==> Defined(cval))
-  !   .and. (dtype == T_FLAG ==> Defined(lval))
+  !   .and. (dtype == T_INTEGER ==> Defined(ival,imin,imax,ivar))
+  !   .and. (dtype == T_REAL ==> Defined(rval,rmin,rmax,rvar))
+  !   .and. (dtype == T_LOGICAL ==> Defined(lval,lvar))
+  !   .and. (dtype == T_STRING ==> Defined(cval,cvar))
+  !   .and. (dtype == T_FLAG ==> Defined(lval,lvar))
   !
   ! For any intrinsic Fortran type, Defined means that the value has been
   ! explicitly set in the program either to a valid value (either a default
@@ -435,7 +435,7 @@ contains
     logical,          optional, intent(in) :: required
     character(len=*), optional, intent(in) :: description
     character(len=*), optional, intent(in) :: group
-    character(len=*), optional, target :: var
+    character(len=opt_len), optional, target :: var
 
     type(opt_t), pointer :: opt
 
@@ -763,7 +763,7 @@ contains
   function new_opt(opts,name,abbrev,required,description,group) result(opt)
     ! Allocate and append a new option to the end of the options list, and
     ! initialize the generic fields which apply to all data types.
-    ! On exit: Defined(name,abbrev,descr,required,found)
+    ! On exit: Defined(name,abbrev,descr,required,found,ivar,lvar,cvar,rvar)
     ! Status: proved
     implicit none
     type(options_t), target, intent(inout) :: opts

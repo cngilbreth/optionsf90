@@ -2,7 +2,7 @@
 !
 ! From: options.f90: Module for options processing
 ! http://infty.net/options/options.html
-! v0.8b2
+! v0.8.1
 !
 ! Copyright (c) 2009, 2012 Christopher N. Gilbreth
 !

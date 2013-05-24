@@ -29,11 +29,11 @@ program testopts
   integer :: ierr, n1, n2, q, n1_g1
   logical :: l1, h, flag1, flag1_g1
   real(8) :: r1, r2
-  character(len=1024) :: str1, inputfile, group1_inputfile, overwrite
+  character(len=opt_len) :: str1, inputfile, group1_inputfile, overwrite
 
-  call define_help_option(opts,print_help)
+  call define_help_flag(opts,print_help)
   call define_option_integer(opts,"n1",16,abbrev='a',description="An integer option. &
-       &This one has no min or max values defined.")
+       &This one has no min or max values defined.",var=n1)
   call define_option_integer(opts,"n2",16,abbrev='b',min=-10,max=12,&
        description="Another integer option. This one has a min value of -10 and&
        & a max value of 12 defined.")
@@ -47,9 +47,9 @@ program testopts
        &wxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmno&
        &pqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefgh&
        &ijklmnopqrstuvwxyz1234567890-=!@#$%^&*()_+[]\;',./{}|:<>?1234567890-=!@&
-       &#$%^&*()_+[]\;',./{}|:<>?")
+       &#$%^&*()_+[]\;',./{}|:<>?",var=l1)
   call define_option_real(opts,"real1",3.1415926535897931d0,abbrev='r',&
-       description="A real-valued option, with default value 3.1415926535897931.")
+       description="A real-valued option, with default value 3.1415926535897931.",var=r1)
   call define_option_real(opts,"real2",2.7182818284590451d0,min=0.d0,max=100.d0,&
        description="This is another real-valued option, with default value&
        & 2.7182818284590451. In this case the min value is 0.0, and the max &
@@ -57,9 +57,9 @@ program testopts
   call define_option_string(opts,'str1','(none)',abbrev='s',description=new_line('a')&
        //new_line('a')//" This option is string-valued, with default value &
        &'(none)'. The description begins with two new lines, followed by a space,&
-       & and ends with an additional newline. The abbreviation is -s."//new_line('a'))
+       & and ends with an additional newline. The abbreviation is -s."//new_line('a'),var=str1)
   call define_flag(opts,'flag1','f',description="  This is a flag. Description&
-       & begins with two spaces.")
+       & begins with two spaces.",var=flag1)
   call define_option_integer(opts,'intr',7,abbrev='q',&
        description="This is a required option, intended to test check_required_opts.",&
        required=.true.)
@@ -113,13 +113,13 @@ program testopts
 
   write (*,'(a)') "* Test of get_option:"
   call get_flag(opts,'help',h)
-  call get_option_integer(opts,"n1",n1)
+  !call get_option_integer(opts,"n1",n1)
   call get_option_integer(opts,"n2",n2)
-  call get_option_logical(opts,"logical1",l1)
-  call get_option_real(opts,"real1",r1)
+  !call get_option_logical(opts,"logical1",l1)
+  !call get_option_real(opts,"real1",r1)
   call get_option_real(opts,"real2",r2)
-  call get_option_string(opts,'str1',str1)
-  call get_flag(opts,'flag1',flag1)
+  !call get_option_string(opts,'str1',str1)
+  !call get_flag(opts,'flag1',flag1)
   call get_option_integer(opts,"intr",q)
   call get_option_string(opts,'inputfile',inputfile)
   call get_flag(opts,'flag1_g1',flag1_g1)
