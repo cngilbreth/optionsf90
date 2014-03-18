@@ -1,6 +1,6 @@
 ! options.f90: Module for options processing
 ! http://infty.net/options/options.html
-! v0.8.1
+! v0.8.2
 !
 ! Copyright (c) 2009, 2012 Christopher N. Gilbreth
 !
@@ -1716,7 +1716,8 @@ contains
   ! ** INPUT FILE PROCESSING ************************************************* !
 
 
-  subroutine process_input_file(opts,filename,ierr,group,overwrite,delim_char,comment_chars)
+  subroutine process_input_file(opts,filename,ierr,group,overwrite,delim_char,&
+       comment_chars)
     ! Read input options from file
     ! Input/output:
     !   opts: Input options structure. Input file is taken from opts%arg1. On
@@ -1840,9 +1841,11 @@ contains
     name = ''
     beg = idx
 
+    ! Skip blanks
     call skip_chars(unit,blank,idx,nchar,ios)
     if (ios .ne. 0) return
 
+    ! Read option name
     call read_while(unit,is_name_char,idx,name,nchar,ios)
     if (nchar .eq. 0) then
        write (error_unit,'(a,i0,a)') 'Error: expected option name at position ', &
@@ -1856,6 +1859,7 @@ contains
     end if
     if (ios > 0) return
 
+    ! Skip blanks
     call skip_chars(unit,blank,idx,nchar,ios)
     if (ios < 0) then
        write (error_unit,'(3a)') 'Error: unexpected end of file found while&
@@ -1864,6 +1868,7 @@ contains
     end if
     if (ios > 0) return
 
+    ! Skip delimiter character
     call skip_chars(unit,delim_char,idx,nchar,ios)
     if (nchar .eq. 0) then
        write (error_unit,'(3a,i0,a)',advance='no') &
@@ -1874,11 +1879,12 @@ contains
        return
     end if
 
+    ! Skip blanks
     call skip_chars(unit,blank,idx,nchar,ios)
     if (ios > 0) return
     if (ios < 0) then
-       ! End of file -- ok
-       ierr = ios
+       ! End of file -- ok, the option value might be a blank string
+       ierr = 0
        return
     end if
 
@@ -1890,17 +1896,21 @@ contains
        call read_until_char(unit,c,idx,val,nchar,ios)
        if (ios > 0) return
        if (ios < 0) then
+          ! End of file found
           write (error_unit,'(2a)') 'Error: unterminated quote found while reading&
                & value of option "', trim(name), '"'
+          return
        end if
        idx = idx + 1
+       ierr = 0
     else
        ! No quote: read until end of line, comment character, or end of file
        end_chars = comment_chars//crlf
        call read_until_char(unit,end_chars,idx,val,nchar,ios)
        if (ios > 0) return
+       ! ios < 0 indicates end of file and is fine
+       ierr = 0
     end if
-    ierr = ios
   end subroutine parse_opt
 
 
@@ -1916,6 +1926,20 @@ contains
 
 
   subroutine read_while(unit,p,idx,buf,nchar,ios)
+    ! Read characters from a file while some predicate holds.
+    ! Input:
+    !   unit:  File unit, opened for reading (random-access)
+    !   p:     Predicate function
+    ! Input/output:
+    !   idx:   On entry: Position in the file to start at
+    !          On exit: Position in the file just past the end of the string
+    !          which has been read.
+    ! Output:
+    !   buf:   Output buffer
+    !   nchar: Number of characters read (buf(1:nchar) is the output string)
+    !   ios:   I/O status from the read statement:
+    !            ios > 0: error
+    !            ios < 0: End of file encountered
     implicit none
     integer, intent(in) :: unit
     interface
@@ -1941,6 +1965,22 @@ contains
 
 
   subroutine read_until_char(unit,chars,idx,buf,nchar,ios)
+    ! Read characters from a file one-by-one until one of a set of characters is
+    ! encountered.
+    ! Input:
+    !   unit:   File unit, opened for reading (type?)
+    !   chars:  Characters to look for. Stop reading when one of these is
+    !           encountered
+    ! Input/output:
+    !   idx:    On entry: Position in the file to start at
+    !           On exit: Position in the file just past the end of the
+    !           string which has been read.
+    ! Output:
+    !   buf:    Output buffer
+    !   nchar:  Number of characters read which are not in 'chars'
+    !           (buf(1:nchar) is the output string)
+    !   ios:    I/O status from the read statement
+    !           ios < 0 if end-of-file was encountered; ios > 0 for an error
     implicit none
     integer, intent(in) :: unit
     character(len=*), intent(in) :: chars
