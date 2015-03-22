@@ -314,6 +314,13 @@ $TEST --intr 0 -r +1234.5678E+111 &> test.out
 check_param 'test.out' 'real1' '1.23456780+E\+114' "$name"
 echo "$name passed"
 
+# Real value (default value)
+tn=`expr $tn + 1`
+name="test$tn (real value default)"
+$TEST --intr 0 &> test.out
+check_param 'test.out' 'real1' '3\.1415926.+E\+000' "$name" "F"
+echo "$name passed"
+
 # Real value (invalid)
 tn=`expr $tn + 1`
 name="test$tn (invalid real 1)"
@@ -612,6 +619,15 @@ intr: 42
 EOF
 $TEST --intr 3 -o 'error' -i /tmp/input &> test.out
 check_output 'test.out' '^Error: tried to set option "intr" twice' "$name"
+echo "$name passed"
+
+
+# input file -- no newline at end of file
+tn=`expr $tn + 1`
+name="test$tn (no newline at EOF)"
+echo "intr: 42" > /tmp/input
+$TEST 'error' -i /tmp/input &> test.out
+check_param 'test.out' 'intr' '42' "$name"
 echo "$name passed"
 
 

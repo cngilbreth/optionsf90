@@ -1,5 +1,7 @@
 FC = gfortran -Wall -pedantic -fcheck=all -g
 
+all: test example1 example2
+
 test: options.o test.o
 	$(FC) $+ -o $@
 

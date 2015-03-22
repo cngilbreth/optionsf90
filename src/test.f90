@@ -22,6 +22,11 @@
 ! SOFTWARE.
 
 program testopts
+  ! Test program which defines a bunch of different options, which have
+  ! different descriptions, initial values, etc. It reads the options from the
+  ! command line and from an input file (if specified) and then just prints them
+  ! all to stdout. Called by test.sh, which looks for correct values and
+  ! appropriate errors depending on input.
   use options
   implicit none
 
@@ -32,11 +37,14 @@ program testopts
   character(len=opt_len) :: str1, inputfile, group1_inputfile, overwrite
 
   call define_help_flag(opts,print_help)
+
   call define_option_integer(opts,"n1",16,abbrev='a',description="An integer option. &
        &This one has no min or max values defined.",var=n1)
+
   call define_option_integer(opts,"n2",16,abbrev='b',min=-10,max=12,&
        description="Another integer option. This one has a min value of -10 and&
        & a max value of 12 defined.")
+
   call define_option_logical(opts,"logical1",.false.,abbrev='l',&
        description="This is a logical option. Logical options take default values&
        & (here .false.) but, as one would expect, do not accept minimum or maximum&
@@ -48,35 +56,46 @@ program testopts
        &pqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefgh&
        &ijklmnopqrstuvwxyz1234567890-=!@#$%^&*()_+[]\;',./{}|:<>?1234567890-=!@&
        &#$%^&*()_+[]\;',./{}|:<>?",var=l1)
+
   call define_option_real(opts,"real1",3.1415926535897931d0,abbrev='r',&
        description="A real-valued option, with default value 3.1415926535897931.",var=r1)
+
   call define_option_real(opts,"real2",2.7182818284590451d0,min=0.d0,max=100.d0,&
        description="This is another real-valued option, with default value&
        & 2.7182818284590451. In this case the min value is 0.0, and the max &
        &value is 100. No abbreviation is defined.")
+
   call define_option_string(opts,'str1','(none)',abbrev='s',description=new_line('a')&
        //new_line('a')//" This option is string-valued, with default value &
        &'(none)'. The description begins with two new lines, followed by a space,&
        & and ends with an additional newline. The abbreviation is -s."//new_line('a'),var=str1)
+
   call define_flag(opts,'flag1','f',description="  This is a flag. Description&
        & begins with two spaces.",var=flag1)
+
   call define_option_integer(opts,'intr',7,abbrev='q',&
        description="This is a required option, intended to test check_required_opts.",&
        required=.true.)
+
   ! This option is used by the test
   call define_option_string(opts,'inputfile','',abbrev='i',description="Input file. &
        &Read options from this file after processing command-line options. Will &
        &overwrite (for this test).")
+
   ! So is this
   call define_option_string(opts,'overwrite','yes',abbrev='o',description=&
        &"Overwrite command-line options when reading from input file")
+
   call define_option_string(opts,'group1_inputfile','',abbrev='g',description=&
        &"Input file for group1 options.")
+
   ! Define options in a group "group1"
   call define_flag(opts,'flag1_g1',description="This is a flag, defined in&
        & the group ""group1"".", group='group1')
+
   call define_option_integer(opts,"n1_g1",1024,abbrev='j',description="An integer option,&
        & defined in the group ""group1"".",group='group1')
+
 
   call process_command_line(opts,ierr)
   if (ierr .ne. 0) stop

@@ -1,8 +1,8 @@
 ! options.f90: Module for options processing
 ! http://infty.net/options/options.html
-! v0.8.2
+! v0.8.3
 !
-! Copyright (c) 2009, 2012 Christopher N. Gilbreth
+! Copyright (c) 2009, 2012, 2015 Christopher N. Gilbreth
 !
 ! Permission is hereby granted, free of charge, to any person obtaining a copy
 ! of this software and associated documentation files (the "Software"), to deal
@@ -34,7 +34,7 @@ module options
   integer, parameter, public :: descr_len = 2048
   ! Max number of options & positional arguments
   integer, parameter :: maxopts = 32
-  integer, parameter :: maxargs = 32
+  integer, parameter :: maxargs = 1024
   ! For formatting output
   integer, parameter :: name_column  = 3
   integer, parameter :: descr_column = 30
@@ -96,8 +96,8 @@ module options
   !   .and. (dtype == T_FLAG ==> Defined(lval,lvar))
   !
   ! For any intrinsic Fortran type, Defined means that the value has been
-  ! explicitly set in the program either to a valid value (either a default
-  ! value or an input value).
+  ! explicitly set in the program to a valid value (either a default value or an
+  ! input value).
   !
   ! For names, Defined(name) ==> is_name(name)
   ! Abbreviations: Defined(a) ==> (a == ' ' .or. is_abbrev_char(a))
@@ -154,7 +154,8 @@ contains
 
   ! ** REAL OPTIONS ********************************************************** !
 
-  subroutine define_option_real(opts,name,default,min,max,abbrev,required,description,group,var)
+  subroutine define_option_real(opts,name,default,min,max,abbrev,required,&
+       description,group,var)
     ! Status: Proved
     ! Postcondition: Defined(opt)
     implicit none
@@ -179,7 +180,10 @@ contains
 
     if (present(min)) opt%rmin = min
     if (present(max)) opt%rmax = max
-    if (present(var)) opt%rvar => var
+    if (present(var)) then
+       opt%rvar => var
+       var = default
+    end if
   end subroutine define_option_real
 
 
@@ -199,8 +203,9 @@ contains
 
   subroutine set_value_real(opt,valstr,ierr)
     ! Status: proved
-    ! Defined(opt) .and. ierr == 0
-    !     ==>  IsReal(valstr) .and. Defined(opt%rval) and InBounds(opt%rval)
+    ! Postcondition:
+    !   Defined(opt) .and. ierr == 0
+    !       ==>  IsReal(valstr) .and. Defined(opt%rval) and InBounds(opt%rval)
     implicit none
     type(opt_t), intent(inout) :: opt
     character(len=*), intent(in) :: valstr
@@ -210,17 +215,21 @@ contains
 
     ierr = 1
     if (.not. is_real(valstr)) then
-       write (error_unit,'(3a)') "Error: parameter ", trim(valstr), " is not a valid real number."
+       write (error_unit,'(3a)') "Error: parameter ", trim(valstr), &
+            " is not a valid real number."
        return
     end if
     read(valstr,*,iostat=ios) opt%rval
     if (ios .ne. 0) then
-       write (error_unit,'(3a)') "Error: couldn't convert ", trim(valstr), " to a real number."
+       write (error_unit,'(3a)') "Error: couldn't convert ", trim(valstr), &
+            " to a real number."
        return
     end if
     if (opt%rval < opt%rmin .or. opt%rval > opt%rmax) then
-       write (error_unit,'(3a)') 'Error: value for option "', trim(opt%name), '" out of range.'
-       write (error_unit,'(3(a,es15.8))') "Value: ", opt%rval, ", min: ", opt%rmin, ", max: ", opt%rmax
+       write (error_unit,'(3a)') 'Error: value for option "', trim(opt%name), &
+            '" out of range.'
+       write (error_unit,'(3(a,es15.8))') "Value: ", opt%rval, ", min: ", opt%rmin, &
+            ", max: ", opt%rmax
        return
     end if
     if (associated(opt%rvar)) then
@@ -271,7 +280,10 @@ contains
 
     if (present(min)) opt%imin = min
     if (present(max)) opt%imax = max
-    if (present(var)) opt%ivar => var
+    if (present(var)) then
+       opt%ivar => var
+       var = default
+    end if
   end subroutine define_option_integer
 
 
@@ -364,7 +376,10 @@ contains
 
     opt%dtype = T_LOGICAL
     opt%lval  = default
-    if (present(var)) opt%lvar => var
+    if (present(var)) then
+       opt%lvar => var
+       var = default
+    end if
   end subroutine define_option_logical
 
 
@@ -443,7 +458,10 @@ contains
 
     opt%dtype = T_STRING
     opt%cval  = default
-    if (present(var)) opt%cvar => var
+    if (present(var)) then
+       opt%cvar => var
+       var = default
+    end if
   end subroutine define_option_string
 
 
@@ -1435,16 +1453,22 @@ contains
           goto 99
        end if
     end do
+
+    ! All clear
     mierr = 0
+    ! Special case: the user just specified -h or --help and a help routine is
+    ! defined.
     if (associated(opts%help_routine)) then
        call get_flag(opts,'help',help)
        if (help) then
           call opts%help_routine(opts)
-          mierr = 3
+          stop
        end if
     end if
     if (present(ierr)) ierr = mierr
     return
+
+    ! Error handling
 99  if (associated(opts%help_routine)) then
        write (error_unit,'(a)') "Try using -h for more info."
     end if
